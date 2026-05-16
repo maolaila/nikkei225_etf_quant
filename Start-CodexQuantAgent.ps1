@@ -67,6 +67,7 @@ param(
     [switch]$SkipInitialDataExpansion,
     [switch]$StopWhenStableTargetReached,
     [switch]$DisableAutoRepair,
+    [switch]$DisableAutoGitCommit,
     [switch]$StopOnCodexFailure,
     [switch]$DryRun,
     [switch]$ResetState
@@ -776,6 +777,85 @@ function Invoke-TrainingCycleReport {
     }
     catch {
         Write-AgentMessage "training-cycle-report failed: $($_.Exception.Message)"
+    }
+}
+
+function Invoke-AutoGitCommit {
+    param(
+        [Parameter(Mandatory = $true)][string]$Role,
+        [Parameter(Mandatory = $true)][int]$CycleNumber
+    )
+
+    if ($DisableAutoGitCommit) {
+        Write-AgentMessage "Auto git commit disabled; skipping commit after '$Role'."
+        return
+    }
+
+    try {
+        Push-Location -LiteralPath $script:WorkspaceRoot
+        try {
+            $inside = (& git rev-parse --is-inside-work-tree 2>$null) -join ""
+            if ($LASTEXITCODE -ne 0 -or $inside.Trim() -ne "true") {
+                Write-AgentMessage "Auto git commit skipped because workspace is not a git repository."
+                return
+            }
+
+            $statusBefore = @(& git status --porcelain=v1 --untracked-files=all)
+            if ($LASTEXITCODE -ne 0) {
+                Write-AgentMessage "Auto git commit skipped because git status failed."
+                return
+            }
+            if ($statusBefore.Count -eq 0) {
+                Write-AgentMessage "Auto git commit skipped after '$Role'; no code/config/doc changes."
+                return
+            }
+
+            Write-AgentMessage "Auto git commit after '$Role': staging $($statusBefore.Count) changed path entries."
+            & git add -A -- .
+            if ($LASTEXITCODE -ne 0) {
+                Write-AgentMessage "Auto git commit failed while staging changes."
+                return
+            }
+
+            & git diff --cached --quiet
+            if ($LASTEXITCODE -eq 0) {
+                Write-AgentMessage "Auto git commit skipped after staging; no committable changes."
+                return
+            }
+
+            $safeRole = $Role -replace "[^A-Za-z0-9_.-]", "-"
+            $message = "Automated supervisor update cycle $CycleNumber $safeRole"
+            & git commit -m $message
+            $commitCode = $LASTEXITCODE
+            if ($commitCode -ne 0) {
+                Write-AgentMessage "Auto git commit failed with code $commitCode."
+                return
+            }
+
+            $commitHash = ((& git rev-parse --short HEAD) -join "").Trim()
+            Write-AgentMessage "Auto git commit created $commitHash; pushing to origin."
+            & git push origin HEAD
+            $pushCode = $LASTEXITCODE
+            if ($pushCode -ne 0) {
+                Write-AgentMessage "Auto git push failed with code $pushCode for commit $commitHash."
+                return
+            }
+
+            Write-AgentMessage "Auto git push completed for commit $commitHash."
+            Add-StateHistory -State $script:State -Event "auto-git-commit" -Data ([pscustomobject]@{
+                role = $Role
+                cycle = $CycleNumber
+                commit = $commitHash
+                changed_entries = $statusBefore.Count
+            })
+            Save-State -State $script:State -Path $script:StatePath
+        }
+        finally {
+            Pop-Location
+        }
+    }
+    catch {
+        Write-AgentMessage "Auto git commit failed after '$Role': $($_.Exception.Message)"
     }
 }
 
@@ -1624,6 +1704,7 @@ $serviceTierForDisplay = if ([string]::IsNullOrWhiteSpace($ServiceTier)) { "defa
     skip_initial_data_expansion = [bool]$SkipInitialDataExpansion
     stop_when_stable_target_reached = [bool]$StopWhenStableTargetReached
     disable_auto_repair = [bool]$DisableAutoRepair
+    disable_auto_git_commit = [bool]$DisableAutoGitCommit
     dry_run = [bool]$DryRun
     started_at = (Get-Date).ToString("o")
 } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $supervisorConfigPath -Encoding UTF8
@@ -1644,6 +1725,7 @@ Write-AgentMessage "RepairAfterUnreadyPasses: $RepairAfterUnreadyPasses"
 Write-AgentMessage "SubagentTimeoutMinutes: $SubagentTimeoutMinutes (0 means no timeout)"
 Write-AgentMessage "StalledSubagentMinutes: $StalledSubagentMinutes (0 means no stall detection)"
 Write-AgentMessage "Auto-repair: $(-not $DisableAutoRepair)"
+Write-AgentMessage "Auto git commit after AI adjustment: $(-not $DisableAutoGitCommit)"
 Write-AgentMessage "Stop file: $script:StopFilePath"
 Write-AgentMessage "Live trading guardrail: always disabled by prompt"
 
@@ -1854,12 +1936,14 @@ try {
             Add-StateHistory -State $state -Event "regression-audit" -Data $auditResult
             Save-State -State $state -Path $statePath
             Repair-IfSubagentFailed -Context "regression audit failed in cycle $($state.cycle)" -Result $auditResult -Metrics $metrics | Out-Null
+            Invoke-AutoGitCommit -Role $auditResult.role -CycleNumber ([int]$state.cycle)
         }
         else {
             $optimizerResult = Invoke-CodexAgent -Role "strategy-optimizer-cycle-$($state.cycle)" -PromptBody (Get-OptimizerPrompt -CycleNumber $state.cycle -Metrics $metrics)
             Add-StateHistory -State $state -Event "strategy-optimizer" -Data $optimizerResult
             Save-State -State $state -Path $statePath
             Repair-IfSubagentFailed -Context "strategy optimizer failed in cycle $($state.cycle)" -Result $optimizerResult -Metrics $metrics | Out-Null
+            Invoke-AutoGitCommit -Role $optimizerResult.role -CycleNumber ([int]$state.cycle)
         }
 
         if ($SleepSeconds -gt 0) {

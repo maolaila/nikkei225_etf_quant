@@ -72,6 +72,13 @@ If the real data has already been downloaded, start the long-running autonomous 
 
 The supervisor treats `MinTrades` as a sample-size gate, not a forced trade quota. It counts success only on real non-synthetic data with multiple walk-forward windows, realistic execution costs, sufficient profit factor, bounded drawdown, acceptable active-month win ratio, and monthly return targets.
 
+After each AI adjustment pass, the supervisor automatically commits and pushes
+code/config/doc changes to GitHub. This happens after `strategy-optimizer` on
+failed cycles and after `regression-audit` on successful cycles. Ignored
+runtime artifacts such as `data/` and `.codex_quant_agent/` are not committed.
+Use `Start-CodexQuantAgent.ps1 -DisableAutoGitCommit` only when you want to
+inspect local AI changes before pushing.
+
 The strategy uses dynamic risk controls. `max_equity_pct` is the normal
 allocation base, while `absolute_max_equity_pct` is the hard cap. Strong
 high-confidence trend signals can receive larger allocation and longer
