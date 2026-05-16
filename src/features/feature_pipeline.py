@@ -9,6 +9,7 @@ from src.data.data_lake import DataLake
 from src.data.symbol_mapper import SymbolMapper
 from src.features.external_references import add_optional_reference_features
 from src.features.implied_nikkei import add_etf_implied_nikkei_features
+from src.features.multi_timeframe import add_multi_timeframe_features
 
 
 def _session_name(timestamp: pd.Timestamp) -> str:
@@ -54,6 +55,7 @@ def build_feature_frame(config: dict[str, Any]) -> pd.DataFrame:
     frame["return_15m"] = session_group["mid_price_proxy"].transform(lambda s: _safe_pct_change(s, 15))
     frame["return_30m"] = session_group["mid_price_proxy"].transform(lambda s: _safe_pct_change(s, 30))
     frame = add_optional_reference_features(frame)
+    frame = add_multi_timeframe_features(frame, config).copy()
     session_group = frame.groupby(["symbol", "trade_date", "session"], sort=False)
     frame["ema_12"] = session_group["mid_price_proxy"].transform(lambda s: s.ewm(span=12, adjust=False, min_periods=12).mean())
     frame["ema_26"] = session_group["mid_price_proxy"].transform(lambda s: s.ewm(span=26, adjust=False, min_periods=26).mean())

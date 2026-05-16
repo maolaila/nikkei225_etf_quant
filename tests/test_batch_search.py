@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from src.experiments.batch_search import candidate_passes_target, generate_candidate_overlays, score_candidate
+from src.experiments.train_until_target import TargetGates
 
 
 def test_generate_candidate_overlays_are_bounded_and_nested():
@@ -77,3 +78,9 @@ def test_score_penalizes_missing_sample_size():
 
     assert score_candidate(base, **kwargs) > score_candidate(low_trade, **kwargs)
 
+
+def test_target_gates_match_batch_search_arguments():
+    gates = TargetGates(target_monthly_return_pct=2.5, min_trades=25)
+
+    assert gates.as_kwargs()["target_monthly_return_pct"] == 2.5
+    assert gates.as_kwargs()["min_trades"] == 25

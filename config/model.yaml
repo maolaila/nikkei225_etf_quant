@@ -16,6 +16,11 @@ model:
     exclude_future_columns: true
     drop_na: true
 
+features:
+  multi_timeframe:
+    intraday_windows_minutes: [3, 5, 15]
+    daily_context_enabled: true
+
 walk_forward:
   enabled: true
   train_window_months: 12

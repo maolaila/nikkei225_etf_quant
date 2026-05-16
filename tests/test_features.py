@@ -30,7 +30,11 @@ def test_feature_pipeline_creates_trailing_momentum(monkeypatch):
     config = {"labeling": {"reference_symbol": "1321"}}
     features = build_feature_frame(config)
     assert "return_5m" in features.columns
+    assert "tf3m_return" in features.columns
+    assert "tf15m_price_vs_vwap_pct" in features.columns
+    assert "prev_daily_return_3d" in features.columns
     assert features["return_5m"].iloc[10] > 0
+    assert features["tf3m_return"].iloc[10] > 0
     assert "future_return_pct" not in features.columns
 
 

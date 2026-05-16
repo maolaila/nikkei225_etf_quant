@@ -15,6 +15,7 @@ from src.data.replay_feed import replay_date
 from src.data.symbol_probe import probe_symbols
 from src.data.validator import validate_normalized_data
 from src.experiments.batch_search import run_batch_search
+from src.experiments.train_until_target import TargetGates, run_train_until_target
 from src.features.feature_pipeline import build_features
 from src.labeling.future_return_labeler import build_labels
 from src.paper.realtime_runner import run_paper_trade
@@ -128,6 +129,21 @@ def build_parser() -> argparse.ArgumentParser:
     batch.add_argument("--min-walk-forward-windows", type=int, default=6)
     batch.add_argument("--output-root", default="data/reports/experiments")
     batch.add_argument("--skip-pipeline", action="store_true")
+
+    train_until = sub.add_parser("train-until-target", parents=[config_parent])
+    train_until.add_argument("--max-cycles", type=int, default=100, help="Use 0 or negative for no fixed cycle cap")
+    train_until.add_argument("--candidates-per-cycle", type=int, default=48)
+    train_until.add_argument("--seed", type=int, default=42)
+    train_until.add_argument("--target-monthly-return-pct", type=float, default=3.0)
+    train_until.add_argument("--min-trades", type=int, default=50)
+    train_until.add_argument("--min-profit-factor", type=float, default=1.2)
+    train_until.add_argument("--max-drawdown-pct", type=float, default=15.0)
+    train_until.add_argument("--min-positive-month-ratio", type=float, default=0.55)
+    train_until.add_argument("--min-monthly-return-floor-pct", type=float, default=-8.0)
+    train_until.add_argument("--min-walk-forward-windows", type=int, default=6)
+    train_until.add_argument("--model", default=None)
+    train_until.add_argument("--output-root", default="data/reports/long_run")
+    train_until.add_argument("--force-rebuild", action="store_true")
 
     replay = sub.add_parser("replay", parents=[config_parent])
     replay.add_argument("--date", required=True)
@@ -247,6 +263,28 @@ def main(argv: list[str] | None = None) -> int:
                 "max_drawdown_pct",
             ]
             print(ranking[[column for column in columns if column in ranking.columns]].head(10).to_string(index=False))
+        return 0
+
+    if args.command == "train-until-target":
+        result = run_train_until_target(
+            config,
+            max_cycles=args.max_cycles,
+            candidates_per_cycle=args.candidates_per_cycle,
+            seed=args.seed,
+            force_rebuild=args.force_rebuild,
+            model_name=args.model,
+            output_root=args.output_root,
+            gates=TargetGates(
+                target_monthly_return_pct=args.target_monthly_return_pct,
+                min_trades=args.min_trades,
+                min_profit_factor=args.min_profit_factor,
+                max_drawdown_pct=args.max_drawdown_pct,
+                min_positive_month_ratio=args.min_positive_month_ratio,
+                min_monthly_return_floor_pct=args.min_monthly_return_floor_pct,
+                min_walk_forward_windows=args.min_walk_forward_windows,
+            ),
+        )
+        print(result)
         return 0
 
     if args.command == "replay":

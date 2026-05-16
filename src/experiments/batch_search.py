@@ -36,6 +36,10 @@ PARAMETER_SPACE: dict[str, list[Any]] = {
     "backtest.risk.max_trades_per_day": [1, 2, 3, 4],
     "backtest.risk.max_daily_loss_pct": [0.8, 1.2, 1.5, 2.0],
     "backtest.risk.max_consecutive_losses": [1, 2, 3],
+    "backtest.risk.max_implied_dispersion_bps": [15, 30, 50, 75],
+    "backtest.execution.latency_bars": [0, 1, 2],
+    "backtest.execution.slippage_bps": [3, 5, 10],
+    "backtest.execution.fallback_spread_bps": [5, 8, 12],
 }
 
 SUMMARY_COLUMNS = [
