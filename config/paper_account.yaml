@@ -1,0 +1,14 @@
+paper_account:
+  enabled: true
+  base_currency: "JPY"
+  initial_cash: 1000000
+  reset_policy: "never"
+  execution_model:
+    use_bid_ask: true
+    fallback_spread_bps: 8
+    buy_slippage_bps: 3
+    sell_slippage_bps: 3
+  portfolio:
+    allow_multiple_positions: false
+    max_open_positions: 1
+    allow_opposite_position: false

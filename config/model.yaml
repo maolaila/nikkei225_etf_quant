@@ -1,0 +1,30 @@
+model:
+  type: "random_forest"
+  fallback_type: "random_forest"
+  random_state: 42
+  training:
+    class_weight: "balanced"
+    drop_na: true
+    scale_features: false
+    n_estimators: 200
+    max_depth: 8
+    min_samples_leaf: 20
+  prediction:
+    min_confidence: 0.32
+    min_action_probability: 0.32
+  features:
+    exclude_future_columns: true
+    drop_na: true
+
+walk_forward:
+  enabled: true
+  train_window_months: 12
+  test_window_months: 1
+  step_months: 1
+  start_date: "2023-01-01"
+  end_date: "2026-05-15"
+  retrain_each_window: true
+  purge_minutes: 60
+  min_train_rows: 1000
+  min_test_rows: 100
+  fallback_train_fraction: 0.35

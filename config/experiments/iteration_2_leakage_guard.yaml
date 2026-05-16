@@ -1,0 +1,10 @@
+# Candidate overlay only. Production YAML remains unchanged.
+features:
+  market_regime:
+    # Use only prior realized volatility when assigning market regimes.
+    volatility_median_lookback_minutes: 7800
+    volatility_median_min_periods: 120
+
+backtest:
+  report:
+    output_dir: "data/reports/experiments/iteration_2_leakage_guard"

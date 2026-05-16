@@ -1,0 +1,13 @@
+.env
+*.env
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.venv/
+dist/
+build/
+*.egg-info/
+.codex_quant_agent/
+data/
+market_data_collector/data/
+market_data_collector/.env

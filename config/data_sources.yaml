@@ -1,0 +1,113 @@
+data_sources:
+  historical_data_provider:
+    primary: "jquants"
+    role: "training_backtest_review_only"
+    allowed_for_live_signals: false
+  live_market_data_provider:
+    primary: "kabustation"
+    fallback:
+      - "tachibana"
+      - "ibkr"
+    require_bid_ask: true
+  execution_provider:
+    primary: "tachibana"
+    fallback:
+      - "kabustation"
+      - "ibkr"
+    live_order_enabled: false
+  historical_primary: "jquants"
+  historical_fallback:
+    - "twelvedata"
+    - "eodhd"
+    - "stooq"
+  realtime_primary: "twelvedata"
+  realtime_fallback:
+    - "kabustation"
+    - "csv_replay"
+  reject_delayed_realtime: true
+
+synthetic:
+  enabled_when_api_missing: false
+  seed: 42
+  max_business_days: 180
+  base_price: 30000
+  opening_price_by_symbol:
+    long_1x: 30000
+    long_2x: 21000
+    short_1x: 3800
+    short_2x: 310
+  trend_return_per_minute_pct: 0.035
+  noise_std_pct: 0.004
+  volume_base: 100000
+
+jquants:
+  enabled: true
+  api_key_env: "JQUANTS_API_KEY"
+  base_url: "https://api.jquants.com/v2"
+  request_timeout_seconds: 20
+  max_retries: 3
+  retry_backoff_seconds: 2
+  rate_limit:
+    requests_per_minute: 60
+  download:
+    chunk_days: 5
+    save_format: "parquet"
+  endpoints:
+    minute_bars: "/equities/bars/minute"
+    daily_bars: "/equities/bars/daily"
+    listed_info: "/listed/info"
+    trading_calendar: "/markets/trading_calendar"
+
+twelvedata:
+  enabled: true
+  api_key_env: "TWELVE_DATA_API_KEY"
+  base_url: "https://api.twelvedata.com"
+  historical:
+    enabled: true
+    interval: "1min"
+    timezone: "Asia/Tokyo"
+  websocket:
+    enabled: true
+    max_symbols: 8
+    reject_if_delayed: true
+
+eodhd:
+  enabled: false
+  api_key_env: "EODHD_API_KEY"
+
+stooq:
+  enabled: true
+  symbols:
+    nikkei225: "^NKX"
+
+fred:
+  enabled: false
+  api_key_env: "FRED_API_KEY"
+  series:
+    nikkei225: "NIKKEI225"
+
+yahoo:
+  enabled: false
+
+kabustation:
+  enabled: false
+  rest_base_url: "http://localhost:18080/kabusapi"
+  websocket_url: "ws://localhost:18080/kabusapi/websocket"
+  api_password_env: "KABUSTATION_API_PASSWORD"
+  live_order_enabled: false
+
+tachibana:
+  enabled: false
+  live_order_enabled: false
+  api_password_env: "TACHIBANA_API_PASSWORD"
+
+ibkr:
+  enabled: false
+  live_order_enabled: false
+
+market_data_collector:
+  enabled: true
+  data_dir: "market_data_collector/data"
+  provider: "jquants"
+  interval: "1m"
+  require_real_provider: true

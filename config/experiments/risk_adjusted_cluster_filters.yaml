@@ -1,0 +1,54 @@
+# Candidate overlay for risk-adjusted return search.
+# It removes the strongest observed loss clusters from the latest real-data
+# backtest while preserving room for higher-confidence long_2x trend entries.
+model:
+  prediction:
+    min_confidence: 0.32
+    min_action_probability: 0.32
+
+strategy:
+  entry_filters:
+    - name: "block_short_1x_all_regimes"
+      enabled: true
+      actions: ["short_1x"]
+    - name: "block_morning_trend_weak_actions"
+      enabled: true
+      actions: ["long_1x", "short_2x"]
+      sessions: ["morning"]
+      market_regimes: ["trend"]
+  exit:
+    stop_loss_pct:
+      long_1x: 0.30
+      long_2x: 0.60
+      short_1x: 0.30
+      short_2x: 0.60
+    dynamic_stop_loss:
+      min_pct:
+        long_1x: 0.20
+        long_2x: 0.35
+        short_1x: 0.20
+        short_2x: 0.35
+      max_pct:
+        long_1x: 0.55
+        long_2x: 1.10
+        short_1x: 0.55
+        short_2x: 1.10
+
+backtest:
+  risk:
+    max_daily_loss_pct: 1.0
+    max_trades_per_day: 2
+    max_consecutive_losses: 1
+  position_limits:
+    long_1x:
+      max_equity_pct: 45
+      absolute_max_equity_pct: 60
+    long_2x:
+      max_equity_pct: 35
+      absolute_max_equity_pct: 50
+    short_1x:
+      max_equity_pct: 0
+      absolute_max_equity_pct: 0
+    short_2x:
+      max_equity_pct: 20
+      absolute_max_equity_pct: 35

@@ -1,0 +1,4 @@
+daily_review:
+  enabled: true
+  output_dir: "data/reports/daily"
+  require_human_review_for_config_changes: true

@@ -1,0 +1,2 @@
+"""Paper-trading simulation components."""
+

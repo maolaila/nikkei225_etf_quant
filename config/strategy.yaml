@@ -1,0 +1,86 @@
+strategy:
+  mode: "historical_backtest"
+  entry_filters:
+    - name: "block_short_1x_all_regimes"
+      enabled: true
+      actions: ["short_1x"]
+    - name: "block_morning_trend_weak_actions"
+      enabled: true
+      actions: ["long_1x", "short_2x"]
+      sessions: ["morning"]
+      market_regimes: ["trend"]
+  signal:
+    weak_return_5m_pct: 0.08
+    strong_return_5m_pct: 0.14
+    min_confidence: 0.55
+  exit:
+    stop_loss_pct:
+      long_1x: 0.30
+      long_2x: 0.60
+      short_1x: 0.30
+      short_2x: 0.60
+    take_profit_r:
+      weak_signal: 1.20
+      strong_signal: 1.50
+    max_holding_minutes: 60
+    exit_if_no_profit_after_minutes: 30
+    force_exit_time: "15:10"
+    exit_on_opposite_signal: true
+    exit_on_neutral_signal: false
+    dynamic_holding:
+      enabled: true
+      confidence_extend_threshold: 0.65
+      confidence_full: 0.85
+      confidence_extend_multiplier: 1.50
+      low_confidence_reduce_threshold: 0.45
+      low_confidence_multiplier: 0.75
+      trend_multiplier: 1.25
+      range_multiplier: 0.75
+      unknown_regime_multiplier: 0.90
+      leveraged_etf_multiplier: 0.90
+      min_minutes: 20
+      max_minutes: 120
+    dynamic_stop_loss:
+      enabled: true
+      high_confidence_threshold: 0.70
+      low_confidence_threshold: 0.45
+      high_confidence_widen_multiplier: 1.25
+      low_confidence_tighten_multiplier: 0.75
+      trend_widen_multiplier: 1.15
+      range_tighten_multiplier: 0.85
+      min_pct:
+        long_1x: 0.20
+        long_2x: 0.35
+        short_1x: 0.20
+        short_2x: 0.35
+      max_pct:
+        long_1x: 0.55
+        long_2x: 1.10
+        short_1x: 0.55
+        short_2x: 1.10
+
+live_trading:
+  enabled: false
+
+market:
+  session_filters:
+    - name: "opening_observation_0900_0905"
+      enabled: true
+      start_time: "09:00"
+      end_time: "09:05"
+      action: "block_new_entries"
+    - name: "pre_lunch_no_new_entries"
+      enabled: true
+      start_time: "11:25"
+      end_time: "11:30"
+      action: "block_new_entries"
+    - name: "afternoon_reprice_1230_1235"
+      enabled: true
+      start_time: "12:30"
+      end_time: "12:35"
+      action: "block_new_entries"
+    - name: "pre_close_no_new_entries"
+      enabled: true
+      start_time: "15:25"
+      end_time: "15:30"
+      action: "block_new_entries"

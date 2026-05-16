@@ -1,0 +1,23 @@
+historical:
+  start_date: "2024-05-16"
+  end_date: "2026-05-15"
+  daily_context_start_date: "2016-05-16"
+  intervals: ["1m", "3m", "5m", "15m", "30m", "1d"]
+  base_interval: "1m"
+  symbols_from_config: true
+  include_disabled_candidates: false
+  data_quality:
+    fail_on_duplicate_timestamps: true
+    fail_on_missing_core_symbols: true
+    allow_missing_volume: false
+    max_missing_bar_pct_per_day: 2.0
+
+market_calendar:
+  timezone: "Asia/Tokyo"
+  sessions:
+    morning:
+      start: "09:00"
+      end: "11:30"
+    afternoon:
+      start: "12:30"
+      end: "15:30"

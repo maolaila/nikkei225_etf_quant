@@ -1,0 +1,5 @@
+ai_review:
+  enabled: false
+  provider: "manual"
+  candidate_config_only: true
+  auto_apply_parameters: false

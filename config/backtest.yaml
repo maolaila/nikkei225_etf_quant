@@ -1,0 +1,89 @@
+backtest:
+  initial_cash_jpy: 1000000
+  execution:
+    broker_profile: "moomoo_japan_cash_etf"
+    signal_delay_bars: 1
+    latency_bars: 1
+    latency_seconds: 0
+    use_next_bar_open: true
+    use_bid_ask_prices: false
+    use_mid_price: false
+    require_bid_ask: false
+    slippage_bps: 3
+    fallback_spread_bps: 8
+    sensitivity:
+      latency_bars: [0, 1, 2, 5]
+      slippage_bps: [3, 5, 10, 20]
+      spread_filter_bps: [5, 10, 20, 30]
+      implied_dispersion_filter_bps: [15, 30, 50]
+      min_edge_bps: [5, 10, 15, 20]
+    market_impact:
+      enabled: true
+      bps_per_1pct_bar_turnover: 2
+      max_bps: 20
+    allow_partial_fill: false
+  cost:
+    commission_enabled: true
+    broker_fee_source: "moomoo Japan official pricing: Japan stocks/ETF trading commission free, system fee free"
+    commission_rate_pct: 0.00
+    fixed_commission_jpy: 0
+    min_commission_jpy: 0
+    max_commission_jpy: 0
+    system_fee_jpy: 0
+  risk:
+    max_risk_per_trade_pct: 0.50
+    max_daily_loss_pct: 1.0
+    max_trades_per_day: 2
+    max_consecutive_losses: 1
+    max_spread_bps: 0
+    max_quote_age_seconds: 0
+    min_bid_depth: 0
+    min_ask_depth: 0
+    max_implied_dispersion_bps: 30
+    spread_filter:
+      enabled: true
+    depth_filter:
+      enabled: true
+    quote_stale_filter:
+      enabled: true
+    etf_dispersion_filter:
+      enabled: true
+    futures_confirmation_filter:
+      enabled: false
+    session_filter:
+      enabled: true
+    volatility_filter:
+      enabled: false
+    cooldown_after_loss:
+      enabled: true
+    realized_loss_gate:
+      enabled: true
+  position_limits:
+    long_1x:
+      max_equity_pct: 45
+      absolute_max_equity_pct: 60
+    long_2x:
+      max_equity_pct: 35
+      absolute_max_equity_pct: 50
+    short_1x:
+      max_equity_pct: 0
+      absolute_max_equity_pct: 0
+    short_2x:
+      max_equity_pct: 20
+      absolute_max_equity_pct: 35
+  position_sizing:
+    dynamic_enabled: true
+    confidence_floor: 0.30
+    confidence_full: 0.80
+    min_multiplier: 0.35
+    max_multiplier: 1.25
+    min_equity_pct: 3
+    trend_multiplier: 1.10
+    range_multiplier: 0.85
+    unknown_regime_multiplier: 0.90
+    leveraged_etf_multiplier: 0.95
+  report:
+    output_dir: "data/reports/backtest"
+    save_trades_csv: true
+    save_equity_curve_csv: true
+    save_markdown: true

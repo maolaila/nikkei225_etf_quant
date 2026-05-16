@@ -1,0 +1,67 @@
+# Candidate overlay only. Production YAML remains unchanged.
+# Cycle-23 bounded hypothesis: cycle 22 removed the loss-only long_1x sleeve,
+# but paired entry/exit review shows entries opened during 12:00-12:59 remain
+# net negative while enough trades remain to satisfy the sample-size gate. Keep
+# the better batch/cycle-22 gates, exits, sizing, and time filters, then add
+# only a lunch-hour 2x entry block.
+strategy:
+  entry_filters:
+    - name: "block_short_1x_all_regimes"
+      enabled: true
+      actions: ["short_1x"]
+    - name: "cycle_22_block_long_1x_all_regimes"
+      enabled: true
+      actions: ["long_1x"]
+    - name: "block_morning_trend_weak_actions"
+      enabled: true
+      actions: ["long_1x", "short_2x"]
+      sessions: ["morning"]
+      market_regimes: ["trend"]
+    - name: "cycle_20_block_late_afternoon_entries"
+      enabled: true
+      actions: ["long_1x", "long_2x", "short_2x"]
+      start_time: "14:00"
+      end_time: "15:29"
+    - name: "cycle_21_block_opening_hour_entries"
+      enabled: true
+      actions: ["long_1x", "long_2x", "short_2x"]
+      start_time: "09:00"
+      end_time: "09:59"
+    - name: "cycle_23_block_lunch_hour_2x_entries"
+      enabled: true
+      actions: ["long_2x", "short_2x"]
+      start_time: "12:00"
+      end_time: "12:59"
+  exit:
+    max_holding_minutes: 90
+    stop_loss_pct:
+      long_2x: 0.8
+      short_2x: 1.2
+    dynamic_holding:
+      confidence_extend_multiplier: 1.2
+      max_minutes: 150
+    dynamic_stop_loss:
+      high_confidence_widen_multiplier: 1.1
+    exit_on_neutral_signal: false
+    exit_on_opposite_signal: true
+model:
+  prediction:
+    min_confidence: 0.3
+    min_action_probability: 0.35
+backtest:
+  position_limits:
+    long_2x:
+      max_equity_pct: 25
+      absolute_max_equity_pct: 35
+    short_2x:
+      max_equity_pct: 15
+      absolute_max_equity_pct: 30
+  position_sizing:
+    max_multiplier: 1.15
+    trend_multiplier: 1.2
+  risk:
+    max_trades_per_day: 3
+    max_daily_loss_pct: 2.0
+    max_consecutive_losses: 1
+  report:
+    output_dir: "data/reports/experiments/strategy_optimizer_cycle_23_lunch_hour_filter"

@@ -1,0 +1,96 @@
+market:
+  timezone: "Asia/Tokyo"
+  currency: "JPY"
+
+reference_symbols:
+  index:
+    symbol: "N225"
+    name: "Nikkei 225 Index"
+    enabled: true
+  proxy_etf:
+    symbol: "1321"
+    role: "index_proxy"
+    enabled: true
+
+actions:
+  flat: 0
+  long_1x: 1
+  long_2x: 2
+  short_1x: 3
+  short_2x: 4
+
+etf_universe:
+  long_1x:
+    description: "One times long ETF"
+    direction: 1
+    leverage: 1
+    candidates:
+      - symbol: "1321"
+        name: "NEXT FUNDS Nikkei 225 ETF"
+        enabled: true
+        priority: 1
+        provider_symbol:
+          jquants: "13210"
+          twelvedata: "1321"
+          yahoo: "1321.T"
+          kabustation: "1321@1"
+  long_2x:
+    description: "Two times long ETF"
+    direction: 1
+    leverage: 2
+    candidates:
+      - symbol: "1570"
+        name: "NEXT FUNDS Nikkei 225 Leveraged Index ETF"
+        enabled: true
+        priority: 1
+        provider_symbol:
+          jquants: "15700"
+          twelvedata: "1570"
+          yahoo: "1570.T"
+          kabustation: "1570@1"
+      - symbol: "1458"
+        enabled: false
+        priority: 2
+      - symbol: "1579"
+        enabled: false
+        priority: 3
+  short_1x:
+    description: "One times inverse ETF"
+    direction: -1
+    leverage: 1
+    candidates:
+      - symbol: "1571"
+        name: "NEXT FUNDS Nikkei 225 Inverse Index ETF"
+        enabled: true
+        priority: 1
+        provider_symbol:
+          jquants: "15710"
+          twelvedata: "1571"
+          yahoo: "1571.T"
+          kabustation: "1571@1"
+      - symbol: "1456"
+        enabled: false
+        priority: 2
+      - symbol: "1580"
+        enabled: false
+        priority: 3
+  short_2x:
+    description: "Two times inverse ETF"
+    direction: -1
+    leverage: 2
+    candidates:
+      - symbol: "1357"
+        name: "NEXT FUNDS Nikkei 225 Double Inverse Index ETF"
+        enabled: true
+        priority: 1
+        provider_symbol:
+          jquants: "13570"
+          twelvedata: "1357"
+          yahoo: "1357.T"
+          kabustation: "1357@1"
+      - symbol: "1360"
+        enabled: false
+        priority: 2
+      - symbol: "1459"
+        enabled: false
+        priority: 3

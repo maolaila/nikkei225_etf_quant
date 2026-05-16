@@ -1,0 +1,15 @@
+# Candidate overlay only. Production YAML remains unchanged.
+strategy:
+  entry_filters:
+    - name: "block_morning_trend_entries"
+      enabled: true
+      # Entry-time evidence shows morning trend-regime entries are the dominant
+      # loss cluster. This is an entry-only filter; original signals remain
+      # available for exit decisions and are annotated in signal_log.csv.
+      actions: ["long_1x", "long_2x", "short_1x", "short_2x"]
+      sessions: ["morning"]
+      market_regimes: ["trend"]
+
+backtest:
+  report:
+    output_dir: "data/reports/experiments/iteration_3_morning_trend_entry_filter"

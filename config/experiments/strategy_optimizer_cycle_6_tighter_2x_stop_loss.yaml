@@ -1,0 +1,67 @@
+# Candidate overlay only. Production YAML remains unchanged.
+# Cycle-6 bounded hypothesis: the cycle-5 candidate is near break-even but
+# still loses most clearly through a few low-confidence leveraged stop exits.
+# Keep the same entry filters/exposure profile and tighten only 2x stop bases.
+model:
+  prediction:
+    min_confidence: 0.30
+    min_action_probability: 0.35
+
+strategy:
+  entry_filters:
+    - name: "block_short_1x_all_regimes"
+      enabled: true
+      actions: ["short_1x"]
+    - name: "block_long_1x_all_regimes"
+      enabled: true
+      actions: ["long_1x"]
+    - name: "block_morning_trend_weak_actions"
+      enabled: true
+      actions: ["long_1x", "short_2x"]
+      sessions: ["morning"]
+      market_regimes: ["trend"]
+    - name: "block_late_afternoon_2x_entries"
+      enabled: true
+      actions: ["long_2x", "short_2x"]
+      start_time: "14:00"
+      end_time: "15:30"
+    - name: "block_unknown_regime_leveraged_entries"
+      enabled: true
+      actions: ["long_2x", "short_2x"]
+      market_regimes: ["unknown"]
+    - name: "block_late_morning_range_short_2x_entries"
+      enabled: true
+      actions: ["short_2x"]
+      market_regimes: ["range"]
+      start_time: "10:45"
+      end_time: "10:59"
+  exit:
+    max_holding_minutes: 90
+    stop_loss_pct:
+      long_2x: 0.6
+      short_2x: 0.8
+    dynamic_holding:
+      confidence_extend_multiplier: 1.2
+      max_minutes: 150
+    dynamic_stop_loss:
+      high_confidence_widen_multiplier: 1.1
+    exit_on_neutral_signal: false
+    exit_on_opposite_signal: true
+
+backtest:
+  position_limits:
+    long_2x:
+      max_equity_pct: 25
+      absolute_max_equity_pct: 35
+    short_2x:
+      max_equity_pct: 15
+      absolute_max_equity_pct: 30
+  position_sizing:
+    max_multiplier: 1.15
+    trend_multiplier: 1.2
+  risk:
+    max_trades_per_day: 3
+    max_daily_loss_pct: 2.0
+    max_consecutive_losses: 1
+  report:
+    output_dir: "data/reports/experiments/strategy_optimizer_cycle_6_tighter_2x_stop_loss"

@@ -1,0 +1,58 @@
+# Candidate overlay only. Production YAML remains unchanged.
+# Batch rank-1 settings are copied from batch_search_20260516_094425/candidate_048.
+# The bounded cycle-2 hypothesis is a configurable late-afternoon entry block:
+# rank-1/cycle-1 paired trade evidence shows entries from 14:00 onward are a
+# concentrated stop_loss/force_exit_time loss cluster.
+model:
+  prediction:
+    min_confidence: 0.30
+    min_action_probability: 0.35
+
+strategy:
+  entry_filters:
+    - name: "block_short_1x_all_regimes"
+      enabled: true
+      actions: ["short_1x"]
+    - name: "block_long_1x_all_regimes"
+      enabled: true
+      actions: ["long_1x"]
+    - name: "block_morning_trend_weak_actions"
+      enabled: true
+      actions: ["long_1x", "short_2x"]
+      sessions: ["morning"]
+      market_regimes: ["trend"]
+    - name: "block_late_afternoon_2x_entries"
+      enabled: true
+      actions: ["long_2x", "short_2x"]
+      start_time: "14:00"
+      end_time: "15:30"
+  exit:
+    max_holding_minutes: 90
+    stop_loss_pct:
+      long_2x: 0.8
+      short_2x: 1.2
+    dynamic_holding:
+      confidence_extend_multiplier: 1.2
+      max_minutes: 150
+    dynamic_stop_loss:
+      high_confidence_widen_multiplier: 1.1
+    exit_on_neutral_signal: false
+    exit_on_opposite_signal: true
+
+backtest:
+  position_limits:
+    long_2x:
+      max_equity_pct: 25
+      absolute_max_equity_pct: 35
+    short_2x:
+      max_equity_pct: 15
+      absolute_max_equity_pct: 30
+  position_sizing:
+    max_multiplier: 1.15
+    trend_multiplier: 1.2
+  risk:
+    max_trades_per_day: 3
+    max_daily_loss_pct: 2.0
+    max_consecutive_losses: 1
+  report:
+    output_dir: "data/reports/experiments/strategy_optimizer_cycle_2_rank1_late_entry_filter"

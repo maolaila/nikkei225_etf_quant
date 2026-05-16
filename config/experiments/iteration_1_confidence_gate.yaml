@@ -1,0 +1,17 @@
+# Candidate overlay only. Production YAML remains unchanged.
+model:
+  prediction:
+    # The current five-class RandomForest probabilities cluster around 0.20-0.35;
+    # 0.55 suppresses every non-flat walk-forward prediction.
+    min_confidence: 0.30
+    min_action_probability: 0.30
+
+strategy:
+  exit:
+    # Suppressed low-confidence minutes should stop new entries, not force churn exits.
+    exit_on_neutral_signal: false
+    exit_on_opposite_signal: true
+
+backtest:
+  report:
+    output_dir: "data/reports/experiments/iteration_1_confidence_gate"
