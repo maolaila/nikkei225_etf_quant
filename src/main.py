@@ -19,6 +19,7 @@ from src.experiments.train_until_target import TargetGates, run_train_until_targ
 from src.features.feature_pipeline import build_features
 from src.labeling.future_return_labeler import build_labels
 from src.paper.realtime_runner import run_paper_trade
+from src.review.training_cycle_report import generate_training_cycle_report
 from src.validation.walk_forward import run_walk_forward
 
 
@@ -115,7 +116,13 @@ def build_parser() -> argparse.ArgumentParser:
     backtest.add_argument("--model", default="latest")
 
     report = sub.add_parser("report", parents=[config_parent])
-    report.add_argument("--type", default="backtest")
+    report.add_argument("--type", default="backtest", choices=["backtest", "training-cycles"])
+
+    cycle_report = sub.add_parser("training-cycle-report", parents=[config_parent])
+    cycle_report.add_argument("--state-path", default=".codex_quant_agent/state/state.json")
+    cycle_report.add_argument("--reports-root", default="data/reports")
+    cycle_report.add_argument("--output", default=None)
+    cycle_report.add_argument("--archive-current", action="store_true")
 
     batch = sub.add_parser("batch-search", parents=[config_parent])
     batch.add_argument("--candidates", type=int, default=24)
@@ -226,11 +233,25 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "report":
+        if args.type == "training-cycles":
+            path = generate_training_cycle_report()
+            print(f"wrote {path}")
+            return 0
         ensure_pipeline(config)
         out = Path(get_nested(config, "backtest.report.output_dir", "data/reports/backtest"))
         if not (out / "metrics.json").exists():
             run_backtest(config)
         path = render_existing_report(config, args.type)
+        print(f"wrote {path}")
+        return 0
+
+    if args.command == "training-cycle-report":
+        path = generate_training_cycle_report(
+            state_path=args.state_path,
+            reports_root=args.reports_root,
+            output_path=args.output,
+            archive_current=args.archive_current,
+        )
         print(f"wrote {path}")
         return 0
 

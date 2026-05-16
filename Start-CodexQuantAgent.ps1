@@ -749,6 +749,36 @@ function Repair-IfSubagentFailed {
     return $true
 }
 
+function Invoke-TrainingCycleReport {
+    if ([string]::IsNullOrWhiteSpace($script:PythonExe)) {
+        Write-AgentMessage "Skipping training cycle dashboard update because no Python runtime is configured."
+        return
+    }
+
+    try {
+        Push-Location -LiteralPath $script:WorkspaceRoot
+        try {
+            $output = & $script:PythonExe -m src.main training-cycle-report --archive-current 2>&1
+            $exitCode = $LASTEXITCODE
+        }
+        finally {
+            Pop-Location
+        }
+
+        if ($output) {
+            foreach ($line in @($output)) {
+                Write-AgentMessage "training-cycle-report: $line"
+            }
+        }
+        if ($null -ne $exitCode -and [int]$exitCode -ne 0) {
+            Write-AgentMessage "training-cycle-report exited with code $exitCode"
+        }
+    }
+    catch {
+        Write-AgentMessage "training-cycle-report failed: $($_.Exception.Message)"
+    }
+}
+
 function Test-ProjectReady {
     $mainPath = Join-Path $script:WorkspaceRoot "src\main.py"
     $pyprojectPath = Join-Path $script:WorkspaceRoot "pyproject.toml"
@@ -1800,6 +1830,7 @@ try {
         $cycleSuccess = Update-RegressionState -State $state -Metrics $metrics
         Save-State -State $state -Path $statePath
         Write-AgentMessage ("Regression progress: target_monthly_{0}_return_pct>={1}, cycles={2}/{3}, successful_at_current_target={4}, consecutive_successes={5}/{6}, current_success={7}" -f $MonthlyReturnTargetMode, (Get-CurrentReturnTargetPct), $state.regression_cycles, $MinRegressionCycles, $state.successful_cycles, $state.consecutive_successes, $RequiredConsecutiveSuccesses, $cycleSuccess)
+        Invoke-TrainingCycleReport
 
         if (Test-StableTargetReached -State $state) {
             $achievedTarget = Get-CurrentReturnTargetPct

@@ -101,6 +101,23 @@ python -m src.main batch-search `
 
 Batch outputs are under `data/reports/experiments/batch_search_*/`.
 
+Generate the cycle dashboard with a cycle dropdown:
+
+```powershell
+python -m src.main training-cycle-report
+```
+
+The dashboard is written to `data/reports/backtest/training_cycles.html`.
+It reads supervisor cycle metrics from `.codex_quant_agent/state/state.json`
+and batch candidate monthly returns from `data/reports/experiments/batch_search_*`.
+
+For future supervisor runs, each completed cycle also archives the main
+backtest files under `data/reports/regression_cycles/cycle_*/main_backtest/`
+and refreshes `training_cycles.html`. Main `data/reports/backtest/monthly_returns.csv`
+is overwritten by each new run, so historical main monthly returns from cycles
+before this archive step may not exist. Batch-search candidate monthly returns
+remain available in their timestamped experiment directories.
+
 ## Manual Multi-Timeframe Long Run
 
 The direct long-run entrypoint is `train-until-target`. It rebuilds the
