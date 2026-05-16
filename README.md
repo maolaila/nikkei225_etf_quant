@@ -101,6 +101,73 @@ python -m src.main batch-search `
 
 Batch outputs are under `data/reports/experiments/batch_search_*/`.
 
+## Manual Multi-Timeframe Long Run
+
+The direct long-run entrypoint is `train-until-target`. It rebuilds the
+derived training artifacts, trains walk-forward predictions, runs a baseline
+backtest, then repeatedly searches backtest parameters until a candidate meets
+the gates or the cycle cap is reached.
+
+Current model inputs are still historical ETF-only J-Quants 1-minute OHLCV.
+The feature set adds trailing 3-minute, 5-minute, 15-minute, and lagged daily
+context features. Because the historical data has no real bid/ask/depth,
+backtest results remain research evidence, not live-trading proof.
+
+Start manually:
+
+```powershell
+python -m src.main train-until-target `
+  --force-rebuild `
+  --max-cycles 100 `
+  --candidates-per-cycle 48 `
+  --seed 42 `
+  --target-monthly-return-pct 3 `
+  --min-trades 50 `
+  --min-profit-factor 1.2 `
+  --max-drawdown-pct 15 `
+  --min-positive-month-ratio 0.55 `
+  --min-monthly-return-floor-pct -8 `
+  --min-walk-forward-windows 6 `
+  --output-root data/reports/long_run
+```
+
+Use `--force-rebuild` after changing feature, label, model, or walk-forward
+logic. It deletes only derived artifacts such as `data/features`,
+`data/labels`, `data/models`, and the latest backtest report. It does not
+delete `data/raw`, `data/normalized`, or `market_data_collector/data/raw`.
+
+Outputs:
+
+- `data/features/features.parquet`
+- `data/labels/labels.parquet`
+- `data/models/walk_forward_predictions.*`
+- `data/models/walk_forward_summary.json`
+- `data/reports/long_run/train_until_target_*/status.json`
+- `data/reports/long_run/train_until_target_*/report.md`
+- `data/reports/long_run/train_until_target_*/cycles/*/ranking.csv`
+
+Check progress:
+
+```powershell
+$latest = Get-ChildItem data/reports/long_run/train_until_target_* |
+  Sort-Object LastWriteTime -Descending |
+  Select-Object -First 1
+
+Get-Content "$($latest.FullName)\status.json"
+```
+
+If you start it as a background process, keep the process id and stop it with:
+
+```powershell
+Stop-Process -Id <PID>
+```
+
+The target gates are intentionally conservative. A passing run means the
+candidate survived the configured historical walk-forward and execution-cost
+checks. It does not mean the strategy is ready for live trading without real
+bid/ask/depth, quote-staleness checks, futures/index/iNAV inputs, and paper
+execution review.
+
 ## Data Providers
 
 The real-data path uses `market_data_collector` with J-Quants daily and paid minute bars. Synthetic/offline data is allowed only for plumbing tests and does not count toward profitability milestones.
