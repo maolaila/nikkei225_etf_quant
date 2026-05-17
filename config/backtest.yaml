@@ -3,7 +3,7 @@ backtest:
   execution:
     broker_profile: "moomoo_japan_cash_etf"
     signal_delay_bars: 1
-    latency_bars: 1
+    latency_bars: 0
     latency_seconds: 0
     use_next_bar_open: true
     use_bid_ask_prices: false
@@ -32,14 +32,14 @@ backtest:
     system_fee_jpy: 0
   risk:
     max_risk_per_trade_pct: 0.50
-    max_daily_loss_pct: 1.0
-    max_trades_per_day: 2
-    max_consecutive_losses: 1
+    max_daily_loss_pct: 5.0
+    max_trades_per_day: 6
+    max_consecutive_losses: 5
     max_spread_bps: 0
     max_quote_age_seconds: 0
     min_bid_depth: 0
     min_ask_depth: 0
-    max_implied_dispersion_bps: 30
+    max_implied_dispersion_bps: 100
     spread_filter:
       enabled: true
     depth_filter:
@@ -57,31 +57,31 @@ backtest:
     cooldown_after_loss:
       enabled: true
     realized_loss_gate:
-      enabled: true
+      enabled: false
   position_limits:
     long_1x:
-      max_equity_pct: 45
+      max_equity_pct: 40
       absolute_max_equity_pct: 60
     long_2x:
-      max_equity_pct: 35
-      absolute_max_equity_pct: 50
+      max_equity_pct: 90
+      absolute_max_equity_pct: 45
     short_1x:
-      max_equity_pct: 0
-      absolute_max_equity_pct: 0
+      max_equity_pct: 35
+      absolute_max_equity_pct: 100
     short_2x:
-      max_equity_pct: 20
-      absolute_max_equity_pct: 35
+      max_equity_pct: 40
+      absolute_max_equity_pct: 100
   position_sizing:
     dynamic_enabled: true
-    confidence_floor: 0.30
-    confidence_full: 0.80
-    min_multiplier: 0.35
-    max_multiplier: 1.25
-    min_equity_pct: 3
-    trend_multiplier: 1.10
-    range_multiplier: 0.85
-    unknown_regime_multiplier: 0.90
-    leveraged_etf_multiplier: 0.95
+    confidence_floor: 0.10
+    confidence_full: 0.70
+    min_multiplier: 0.90
+    max_multiplier: 1.00
+    min_equity_pct: 10
+    trend_multiplier: 1.00
+    range_multiplier: 1.25
+    unknown_regime_multiplier: 1.20
+    leveraged_etf_multiplier: 1.20
   report:
     output_dir: "data/reports/backtest"
     save_trades_csv: true
