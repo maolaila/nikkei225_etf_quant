@@ -1,0 +1,77 @@
+# Candidate overlay only. Production YAML remains unchanged.
+# Run with:
+# & $env:QUANT_PYTHON_EXE -m src.main backtest --model latest --config-overrides config/experiments/iteration_6_candidate036_negative_stability.yaml
+#
+# Iteration-6 bounded hypothesis:
+# The required 48-candidate stable-band sweep ranked candidate_036 first.
+# It preserved real J-Quants data, 12 walk-forward windows, no fallback split,
+# and passed the negative stable-band gate with total_return_pct=-11.3161,
+# direction_month_ratio=0.8462, total_trades=54, and max_drawdown_pct=-11.4961.
+# Compared with the main baseline, it raises the action-probability gate,
+# limits trades per day, lowers range exposure, and caps inverse 2x allocation.
+
+model:
+  prediction:
+    min_confidence: 0.10
+    min_action_probability: 0.35
+
+strategy:
+  entry_filters:
+    - name: "block_short_1x_all_regimes"
+      enabled: false
+      actions: ["short_1x"]
+    - name: "block_morning_trend_weak_actions"
+      enabled: false
+      actions: ["long_1x", "short_2x"]
+      sessions: ["morning"]
+      market_regimes: ["trend"]
+  exit:
+    max_holding_minutes: 30
+    stop_loss_pct:
+      long_1x: 0.80
+      long_2x: 0.80
+      short_1x: 1.20
+      short_2x: 1.00
+    dynamic_holding:
+      confidence_extend_multiplier: 1.80
+      max_minutes: 90
+    dynamic_stop_loss:
+      high_confidence_widen_multiplier: 1.40
+      low_confidence_tighten_multiplier: 1.00
+    exit_on_neutral_signal: false
+    exit_on_opposite_signal: false
+
+backtest:
+  report:
+    output_dir: "data/reports/experiments/iteration_6_candidate036_negative_stability"
+  position_limits:
+    long_1x:
+      max_equity_pct: 75
+      absolute_max_equity_pct: 45
+    long_2x:
+      max_equity_pct: 25
+      absolute_max_equity_pct: 100
+    short_1x:
+      max_equity_pct: 70
+      absolute_max_equity_pct: 80
+    short_2x:
+      max_equity_pct: 100
+      absolute_max_equity_pct: 45
+  position_sizing:
+    min_multiplier: 1.10
+    max_multiplier: 1.25
+    trend_multiplier: 1.50
+    range_multiplier: 0.90
+    unknown_regime_multiplier: 1.20
+    leveraged_etf_multiplier: 1.20
+  risk:
+    max_trades_per_day: 2
+    max_daily_loss_pct: 2.0
+    max_consecutive_losses: 10
+    max_implied_dispersion_bps: 150
+    realized_loss_gate:
+      enabled: false
+  execution:
+    latency_bars: 1
+    slippage_bps: 3
+    fallback_spread_bps: 8

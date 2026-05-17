@@ -134,15 +134,15 @@ def _filter_cycles_by_batch_objective(cycles: list[dict[str, Any]], objective: s
 
 
 def archive_current_cycle(*, state: dict[str, Any], reports_root: str | Path = "data/reports") -> Path | None:
-    cycle = _to_int(state.get("regression_cycles"))
-    if cycle <= 0:
-        return None
-
     reports_root = Path(reports_root)
     source = reports_root / "backtest"
     metrics_path = source / "metrics.json"
     monthly_path = source / "monthly_returns.csv"
     if not metrics_path.exists() and not monthly_path.exists():
+        return None
+
+    cycle = _archive_cycle_from_state(state, metrics_path)
+    if cycle <= 0:
         return None
 
     destination = reports_root / "regression_cycles" / f"cycle_{cycle:03d}" / "main_backtest"
@@ -163,6 +163,27 @@ def archive_current_cycle(*, state: dict[str, Any], reports_root: str | Path = "
     }
     (destination / "cycle_metadata.json").write_text(json.dumps(metadata, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return destination
+
+
+def _archive_cycle_from_state(state: dict[str, Any], metrics_path: Path) -> int:
+    regression_cycle = _to_int(state.get("regression_cycles"))
+    current_cycle = _to_int(state.get("cycle"))
+    if current_cycle > regression_cycle and _metrics_newer_than_last_recorded(metrics_path, state.get("last_metrics")):
+        return current_cycle
+    return regression_cycle or current_cycle
+
+
+def _metrics_newer_than_last_recorded(metrics_path: Path, last_metrics: Any) -> bool:
+    if not isinstance(last_metrics, dict):
+        return False
+    last_write_time = _parse_datetime(last_metrics.get("last_write_time"))
+    if last_write_time is None:
+        return False
+    try:
+        source_write_time = datetime.fromtimestamp(metrics_path.stat().st_mtime)
+    except OSError:
+        return False
+    return source_write_time > last_write_time
 
 
 def _build_cycle_records(state: dict[str, Any], reports_root: Path) -> list[dict[str, Any]]:

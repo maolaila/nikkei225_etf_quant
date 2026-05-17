@@ -104,6 +104,43 @@ def test_training_cycle_report_archives_current_cycle_and_renders_dropdown(tmp_p
     assert "numeric.toFixed(2)" in text
 
 
+def test_training_cycle_report_archives_running_cycle_when_backtest_is_fresh(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    state_path = tmp_path / ".codex_quant_agent" / "state" / "state.json"
+    reports_root = tmp_path / "data" / "reports"
+    backtest_dir = reports_root / "backtest"
+    state = {
+        "cycle": 3,
+        "regression_cycles": 2,
+        "last_metrics": {
+            "total_return_pct": -12.0,
+            "total_trades": 56,
+            "last_write_time": "2000-01-01T00:00:00+09:00",
+        },
+        "history": [
+            {
+                "time": "2026-05-17T01:05:30+09:00",
+                "event": "regression-result",
+                "data": {
+                    "regression_cycles": 2,
+                    "metrics": {"total_return_pct": -12.0, "total_trades": 56},
+                },
+            },
+        ],
+    }
+    _write_json(state_path, state)
+    _write_json(backtest_dir / "metrics.json", {"total_return_pct": -9.5, "total_trades": 60})
+    _write_csv(
+        backtest_dir / "monthly_returns.csv",
+        [{"year_month": "2026-05", "return_pct": -0.5, "pnl_jpy": -5000}],
+    )
+
+    generate_training_cycle_report(state_path=state_path, reports_root=reports_root, archive_current=True)
+
+    assert (reports_root / "regression_cycles" / "cycle_003" / "main_backtest" / "metrics.json").exists()
+    assert not (reports_root / "regression_cycles" / "cycle_002" / "main_backtest" / "metrics.json").exists()
+
+
 def test_training_cycle_report_can_filter_batch_objective(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     state_path = tmp_path / ".codex_quant_agent" / "state" / "state.json"
