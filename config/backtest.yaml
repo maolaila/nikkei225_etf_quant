@@ -90,7 +90,7 @@ backtest:
         market_regimes: ["trend"]
         max_confidence: 0.45
         max_action_probability: 0.45
-        multiplier: 0.40
+        multiplier: 0.25
   report:
     output_dir: "data/reports/backtest"
     save_trades_csv: true

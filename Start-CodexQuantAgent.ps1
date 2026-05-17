@@ -1066,11 +1066,12 @@ function Get-LatestBacktestMetrics {
             }
 
             $latestMonthlyReturnPct = $null
+            $monthlyReturnRows = @()
             $property = $properties["monthly_returns"]
             if ($null -ne $property -and $null -ne $property.Value) {
-                $monthlyRows = @($property.Value)
-                if ($monthlyRows.Count -gt 0 -and ($monthlyRows[-1].PSObject.Properties.Name -contains "return_pct")) {
-                    $latestMonthlyReturnPct = [double]$monthlyRows[-1].return_pct
+                $monthlyReturnRows = @($property.Value)
+                if ($monthlyReturnRows.Count -gt 0 -and ($monthlyReturnRows[-1].PSObject.Properties.Name -contains "return_pct")) {
+                    $latestMonthlyReturnPct = [double]$monthlyReturnRows[-1].return_pct
                 }
             }
 
@@ -1100,6 +1101,7 @@ function Get-LatestBacktestMetrics {
                     positive_active_month_ratio = $positiveMonthRatio
                     walk_forward_windows = $walkForwardWindows
                     walk_forward_fallback_used = $walkForwardFallbackUsed
+                    monthly_returns = $monthlyReturnRows
                     latest_monthly_return_pct = $latestMonthlyReturnPct
                     data_is_synthetic = $dataIsSynthetic
                     data_providers = $dataProviders
