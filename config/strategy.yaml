@@ -15,9 +15,9 @@ strategy:
     min_confidence: 0.55
   exit:
     stop_loss_pct:
-      long_1x: 1.20
-      long_2x: 1.00
-      short_1x: 0.80
+      long_1x: 0.80
+      long_2x: 0.80
+      short_1x: 1.20
       short_2x: 1.00
     take_profit_r:
       weak_signal: 1.20
@@ -31,7 +31,7 @@ strategy:
       enabled: true
       confidence_extend_threshold: 0.65
       confidence_full: 0.85
-      confidence_extend_multiplier: 1.20
+      confidence_extend_multiplier: 1.80
       low_confidence_reduce_threshold: 0.45
       low_confidence_multiplier: 1.00
       trend_multiplier: 1.50
@@ -44,8 +44,8 @@ strategy:
       enabled: true
       high_confidence_threshold: 0.70
       low_confidence_threshold: 0.45
-      high_confidence_widen_multiplier: 2.20
-      low_confidence_tighten_multiplier: 0.90
+      high_confidence_widen_multiplier: 1.40
+      low_confidence_tighten_multiplier: 1.00
       trend_widen_multiplier: 1.50
       range_tighten_multiplier: 1.10
       min_pct:
