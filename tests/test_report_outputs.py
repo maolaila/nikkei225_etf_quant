@@ -38,6 +38,14 @@ def test_empty_trade_report_keeps_trade_schema(tmp_path):
     assert list(trade_log.columns) == TRADE_LOG_COLUMNS
     assert "reason" in trade_log.columns
     assert "exit_reason" in trade_log.columns
+    trade_html = (tmp_path / "trade_log.html").read_text(encoding="utf-8")
+    monthly_html = (tmp_path / "monthly_returns.html").read_text(encoding="utf-8")
+    assert "<title>Simulated Trade Log</title>" in trade_html
+    assert "Rows: <span id=\"visibleCount\">0</span> / 0" in trade_html
+    assert "<input id=\"filterInput\"" in trade_html
+    assert "<table id=\"dataTable\">" in trade_html
+    assert "click headers to sort.</div>" in trade_html
+    assert "<title>Monthly Returns</title>" in monthly_html
 
 
 def test_write_json_replaces_non_finite_numbers(tmp_path):

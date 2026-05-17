@@ -1,0 +1,73 @@
+# Candidate overlay only. Production YAML remains unchanged.
+# Fresh cycle-11 sweep rank 1 was batch_search_20260517_012515/candidate_019.
+# Bounded hypothesis: after the cycle-10 afternoon block, residual losses were
+# dominated by morning-open trend long_2x/1570 exits. Keep rank-1 gates, exits,
+# costs, risk, sizing, and the afternoon block; add only one exposure stepdown
+# for the long_2x open-window loss cluster. A 0.40 multiplier improved returns
+# but dropped to 49 trades, so this sample-eligible candidate uses 0.60.
+# Test with:
+# python -m src.main backtest --model latest --config-overrides config/experiments/strategy_optimizer_cycle_11_candidate019_open_long2x_sizing_stepdown.yaml
+model:
+  prediction:
+    min_confidence: 0.30
+    min_action_probability: 0.30
+
+strategy:
+  entry_filters:
+    - name: "block_short_1x_all_regimes"
+      enabled: true
+      actions: ["short_1x"]
+    - name: "block_morning_trend_weak_actions"
+      enabled: true
+      actions: ["long_1x", "short_2x"]
+      sessions: ["morning"]
+      market_regimes: ["trend"]
+    - name: "cycle_10_block_afternoon_entries"
+      enabled: true
+      actions: ["long_1x", "long_2x", "short_2x"]
+      sessions: ["afternoon"]
+  exit:
+    max_holding_minutes: 30
+    stop_loss_pct:
+      long_2x: 1.20
+      short_2x: 0.50
+    dynamic_holding:
+      confidence_extend_multiplier: 1.20
+      max_minutes: 150
+    dynamic_stop_loss:
+      high_confidence_widen_multiplier: 1.25
+    exit_on_neutral_signal: true
+    exit_on_opposite_signal: true
+
+backtest:
+  position_limits:
+    long_2x:
+      max_equity_pct: 35
+      absolute_max_equity_pct: 50
+    short_2x:
+      max_equity_pct: 25
+      absolute_max_equity_pct: 30
+  position_sizing:
+    max_multiplier: 1.15
+    trend_multiplier: 1.0
+    adjustments:
+      - name: "cycle_11_open_trend_long_2x_sizing_stepdown"
+        enabled: true
+        actions: ["long_2x"]
+        sessions: ["morning"]
+        market_regimes: ["trend"]
+        start_time: "09:00"
+        end_time: "09:30"
+        time_basis: "both"
+        multiplier: 0.60
+  risk:
+    max_trades_per_day: 4
+    max_daily_loss_pct: 1.2
+    max_consecutive_losses: 1
+    max_implied_dispersion_bps: 75
+  execution:
+    latency_bars: 1
+    slippage_bps: 5
+    fallback_spread_bps: 5
+  report:
+    output_dir: "data/reports/experiments/strategy_optimizer_cycle_11_candidate019_open_long2x_sizing_stepdown"

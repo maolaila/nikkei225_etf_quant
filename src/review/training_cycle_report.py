@@ -22,7 +22,62 @@ METRIC_KEYS = [
     "walk_forward_windows",
     "walk_forward_fallback_used",
     "data_is_synthetic",
+    "total_abs_return_pct",
+    "positive_month_ratio",
+    "negative_month_ratio",
+    "flat_month_ratio",
+    "dominant_month_ratio",
+    "stable_band_direction",
+    "direction_month_ratio",
 ]
+
+HEADER_TOOLTIPS = {
+    "cycle": "训练轮次编号。",
+    "time": "该轮训练或回归检查完成的时间。",
+    "success": "该轮是否达到当前设定的通过条件。",
+    "target_total_return_pct": "该轮要求达到的目标总收益率，单位为百分比。",
+    "total_return_pct": "回测期间从初始资金到最终资金的总收益率，单位为百分比。",
+    "average_monthly_return_pct": "按月收益率计算的平均值，单位为百分比。",
+    "median_monthly_return_pct": "按月收益率的中位数，单位为百分比。",
+    "min_monthly_return_pct": "表现最差月份的收益率，单位为百分比。",
+    "max_monthly_return_pct": "表现最好月份的收益率，单位为百分比。",
+    "total_trades": "该回测或候选策略完成的卖出成交次数。",
+    "profit_factor": "总盈利除以总亏损绝对值，用于衡量盈亏质量。",
+    "max_drawdown_pct": "回测期间最大资金回撤，单位为百分比。",
+    "positive_active_month_ratio": "有交易月份中收益为正的月份占比。",
+    "walk_forward_windows": "参与验证的 walk-forward 时间窗口数量。",
+    "walk_forward_fallback_used": "是否退化使用了简单时间切分，而不是完整 walk-forward 窗口。",
+    "data_is_synthetic": "该结果是否包含合成数据；盈利目标只接受真实非合成数据。",
+    "year_month": "收益所属年月。",
+    "year": "收益所属年份。",
+    "month": "收益所属月份或年月。",
+    "start_equity_jpy": "该月开始时账户权益，单位为日元。",
+    "end_equity_jpy": "该月结束时账户权益，单位为日元。",
+    "pnl_jpy": "该月盈亏金额，单位为日元。",
+    "return_pct": "该月收益率，单位为百分比。",
+    "rank": "候选策略在本轮批量搜索中的排名。",
+    "candidate_id": "候选策略编号，对应 batch-search 输出目录。",
+    "score": "候选策略综合评分。",
+    "passes_target": "候选策略是否达到当前全部目标门槛。",
+}
+
+MONEY_KEYS = {
+    "start_equity_jpy",
+    "end_equity_jpy",
+    "pnl_jpy",
+}
+
+PERCENT_KEYS = {
+    "target_total_return_pct",
+    "total_return_pct",
+    "average_monthly_return_pct",
+    "median_monthly_return_pct",
+    "min_monthly_return_pct",
+    "max_monthly_return_pct",
+    "total_abs_return_pct",
+    "max_drawdown_pct",
+    "return_pct",
+}
 
 ARCHIVED_BACKTEST_FILES = [
     "metrics.json",
@@ -39,6 +94,7 @@ def generate_training_cycle_report(
     reports_root: str | Path = "data/reports",
     output_path: str | Path | None = None,
     archive_current: bool = False,
+    objective_filter: str | None = None,
 ) -> Path:
     """Write a static HTML dashboard for supervisor regression cycles."""
 
@@ -53,10 +109,28 @@ def generate_training_cycle_report(
     cycles = _build_cycle_records(state, reports_root)
     batch_runs = _load_batch_runs(reports_root)
     _attach_batch_runs(cycles, batch_runs, state)
+    if objective_filter:
+        cycles = _filter_cycles_by_batch_objective(cycles, objective_filter)
 
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(_render_dashboard(cycles, state_path, reports_root), encoding="utf-8")
     return output
+
+
+def _filter_cycles_by_batch_objective(cycles: list[dict[str, Any]], objective: str) -> list[dict[str, Any]]:
+    wanted = str(objective).strip().lower()
+    filtered: list[dict[str, Any]] = []
+    for cycle in cycles:
+        runs = [
+            run
+            for run in cycle.get("batch_runs", []) or []
+            if str((run.get("summary") or {}).get("objective", "")).strip().lower() == wanted
+        ]
+        if runs:
+            clone = dict(cycle)
+            clone["batch_runs"] = runs
+            filtered.append(clone)
+    return filtered
 
 
 def archive_current_cycle(*, state: dict[str, Any], reports_root: str | Path = "data/reports") -> Path | None:
@@ -97,14 +171,21 @@ def _build_cycle_records(state: dict[str, Any], reports_root: Path) -> list[dict
         if item.get("event") != "regression-result":
             continue
         data = item.get("data") or {}
-        metrics = data.get("metrics") or {}
+        metrics = _stable_metrics(data.get("metrics") or {})
         cycle = _to_int(data.get("regression_cycles")) or len(cycles) + 1
         cycles.append(
             {
                 "cycle": cycle,
                 "time": item.get("time", ""),
                 "success": bool(data.get("success", False)),
+                "training_objective": data.get("training_objective", ""),
                 "target_total_return_pct": data.get("current_target_total_return_pct"),
+                "target_total_abs_return_pct": data.get("target_total_abs_return_pct"),
+                "max_total_abs_return_pct": data.get("max_total_abs_return_pct"),
+                "min_stable_month_ratio": data.get("min_stable_month_ratio"),
+                "stable_band_direction": data.get("stable_band_direction", ""),
+                "stable_band_streak_direction": data.get("stable_band_streak_direction", ""),
+                "direction_month_ratio": data.get("direction_month_ratio"),
                 "metrics": {key: metrics.get(key) for key in METRIC_KEYS},
                 "metrics_file": metrics.get("file"),
                 "main_backtest": _load_main_archive(reports_root, cycle),
@@ -114,13 +195,21 @@ def _build_cycle_records(state: dict[str, Any], reports_root: Path) -> list[dict
 
     if not cycles and state.get("last_metrics"):
         cycle = _to_int(state.get("regression_cycles")) or _to_int(state.get("cycle")) or 1
-        metrics = state.get("last_metrics") or {}
+        metrics = _stable_metrics(state.get("last_metrics") or {})
+        target = state.get("target") or {}
         cycles.append(
             {
                 "cycle": cycle,
                 "time": state.get("updated_at", ""),
                 "success": bool(state.get("success", False)),
-                "target_total_return_pct": (state.get("target") or {}).get("current_total_return_pct_gt"),
+                "training_objective": target.get("training_objective", ""),
+                "target_total_return_pct": target.get("current_total_return_pct_gt"),
+                "target_total_abs_return_pct": target.get("target_total_abs_return_pct"),
+                "max_total_abs_return_pct": target.get("max_total_abs_return_pct"),
+                "min_stable_month_ratio": target.get("min_stable_month_ratio"),
+                "stable_band_direction": target.get("stable_band_direction", ""),
+                "stable_band_streak_direction": target.get("stable_band_direction", ""),
+                "direction_month_ratio": None,
                 "metrics": {key: metrics.get(key) for key in METRIC_KEYS},
                 "metrics_file": metrics.get("file"),
                 "main_backtest": _load_main_archive(reports_root, cycle),
@@ -130,6 +219,39 @@ def _build_cycle_records(state: dict[str, Any], reports_root: Path) -> list[dict
 
     cycles.sort(key=lambda row: row["cycle"])
     return cycles
+
+
+def _stable_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
+    clone = dict(metrics)
+    total_return = _to_float(clone.get("total_return_pct"))
+    if total_return is not None:
+        clone["total_abs_return_pct"] = abs(total_return)
+
+    returns = [
+        value
+        for value in (_to_float((row or {}).get("return_pct")) for row in clone.get("monthly_returns", []) or [] if isinstance(row, dict))
+        if value is not None
+    ]
+    if not returns:
+        returns_by_month = clone.get("returns_by_month_pct") or {}
+        if isinstance(returns_by_month, dict):
+            returns = [value for value in (_to_float(value) for value in returns_by_month.values()) if value is not None]
+
+    if returns:
+        count = len(returns)
+        positive = sum(1 for value in returns if value > 0)
+        negative = sum(1 for value in returns if value < 0)
+        flat = sum(1 for value in returns if value == 0)
+        positive_ratio = positive / count
+        negative_ratio = negative / count
+        direction = "positive" if (total_return or 0.0) > 0 else ("negative" if (total_return or 0.0) < 0 else "")
+        clone["positive_month_ratio"] = positive_ratio
+        clone["negative_month_ratio"] = negative_ratio
+        clone["flat_month_ratio"] = flat / count
+        clone["dominant_month_ratio"] = max(positive_ratio, negative_ratio)
+        clone["stable_band_direction"] = direction
+        clone["direction_month_ratio"] = positive_ratio if direction == "positive" else (negative_ratio if direction == "negative" else 0.0)
+    return clone
 
 
 def _load_main_archive(reports_root: Path, cycle: int) -> dict[str, Any]:
@@ -249,6 +371,9 @@ def _role_events(state: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _render_dashboard(cycles: list[dict[str, Any]], state_path: Path, reports_root: Path) -> str:
     payload = json.dumps(_json_ready(cycles), ensure_ascii=False, allow_nan=False).replace("</", "<\\/")
+    header_tooltips = json.dumps(HEADER_TOOLTIPS, ensure_ascii=False, allow_nan=False).replace("</", "<\\/")
+    money_keys = json.dumps(sorted(MONEY_KEYS), ensure_ascii=False).replace("</", "<\\/")
+    percent_keys = json.dumps(sorted(PERCENT_KEYS), ensure_ascii=False).replace("</", "<\\/")
     options_count = len(cycles)
     note = (
         "Cycle metrics are read from the Codex supervisor state. Main backtest monthly returns "
@@ -309,11 +434,17 @@ def _render_dashboard(cycles: list[dict[str, Any]], state_path: Path, reports_ro
   <script>
     const cycles = {payload};
     const metricKeys = {json.dumps(METRIC_KEYS)};
+    const headerTooltips = {header_tooltips};
+    const moneyKeys = new Set({money_keys});
+    const percentKeys = new Set({percent_keys});
     const signedKeys = new Set(['total_return_pct', 'average_monthly_return_pct', 'median_monthly_return_pct', 'min_monthly_return_pct', 'max_monthly_return_pct', 'max_drawdown_pct', 'return_pct', 'pnl_jpy']);
 
     function formatValue(value, key) {{
       if (value === null || value === undefined || value === '') return '';
-      if (typeof value === 'number') return value.toFixed(4);
+      const numeric = typeof value === 'number' ? value : Number(String(value).replaceAll(',', ''));
+      if (Number.isFinite(numeric) && (moneyKeys.has(key) || String(key).endsWith('_jpy'))) return numeric.toFixed(2);
+      if (Number.isFinite(numeric) && (percentKeys.has(key) || String(key).endsWith('_pct'))) return numeric.toFixed(2);
+      if (typeof value === 'number') return Number.isInteger(value) ? String(value) : value.toFixed(2);
       return String(value);
     }}
 
@@ -327,7 +458,11 @@ def _render_dashboard(cycles: list[dict[str, Any]], state_path: Path, reports_ro
 
     function renderTable(rows, columns) {{
       if (!rows || rows.length === 0) return '<div class="muted">No rows available.</div>';
-      const head = columns.map(column => `<th>${{escapeHtml(column.label || column.key)}}</th>`).join('');
+      const head = columns.map(column => {{
+        const label = column.label || column.key;
+        const title = column.title || headerTooltips[column.key] || label;
+        return `<th title="${{escapeHtml(title)}}">${{escapeHtml(label)}}</th>`;
+      }}).join('');
       const body = rows.map(row => `<tr>${{columns.map(column => td(row[column.key], column.key)).join('')}}</tr>`).join('');
       return `<table><thead><tr>${{head}}</tr></thead><tbody>${{body}}</tbody></table>`;
     }}
@@ -346,7 +481,14 @@ def _render_dashboard(cycles: list[dict[str, Any]], state_path: Path, reports_ro
         cycle: cycle.cycle,
         time: cycle.time,
         success: cycle.success,
+        training_objective: cycle.training_objective,
         target_total_return_pct: cycle.target_total_return_pct,
+        target_total_abs_return_pct: cycle.target_total_abs_return_pct,
+        max_total_abs_return_pct: cycle.max_total_abs_return_pct,
+        min_stable_month_ratio: cycle.min_stable_month_ratio,
+        stable_band_direction: cycle.stable_band_direction,
+        stable_band_streak_direction: cycle.stable_band_streak_direction,
+        direction_month_ratio: cycle.direction_month_ratio,
       }};
       for (const key of metricKeys) row[key] = cycle.metrics ? cycle.metrics[key] : '';
       return row;
@@ -360,13 +502,17 @@ def _render_dashboard(cycles: list[dict[str, Any]], state_path: Path, reports_ro
         {{key: 'cycle', label: 'Cycle'}},
         {{key: 'time', label: 'Completed At'}},
         {{key: 'success', label: 'Success'}},
-        {{key: 'target_total_return_pct', label: 'Target Return %'}},
+        {{key: 'training_objective', label: 'Objective'}},
+        {{key: 'stable_band_direction', label: 'Direction'}},
+        {{key: 'target_total_abs_return_pct', label: 'Target Abs %'}},
+        {{key: 'max_total_abs_return_pct', label: 'Max Abs %'}},
         {{key: 'total_return_pct', label: 'Total Return %'}},
+        {{key: 'total_abs_return_pct', label: 'Total Abs %'}},
         {{key: 'average_monthly_return_pct', label: 'Avg Monthly %'}},
         {{key: 'total_trades', label: 'Trades'}},
-        {{key: 'profit_factor', label: 'Profit Factor'}},
         {{key: 'max_drawdown_pct', label: 'Max DD %'}},
-        {{key: 'positive_active_month_ratio', label: 'Positive Active Month Ratio'}},
+        {{key: 'direction_month_ratio', label: 'Direction Month Ratio'}},
+        {{key: 'min_stable_month_ratio', label: 'Target Stable Ratio'}},
         {{key: 'walk_forward_windows', label: 'WF Windows'}},
       ];
       document.getElementById('cycleSummary').innerHTML = renderTable([cycleMetricRow(cycle)], summaryColumns);
@@ -421,12 +567,14 @@ def _render_dashboard(cycles: list[dict[str, Any]], state_path: Path, reports_ro
         {{key: 'cycle', label: 'Cycle'}},
         {{key: 'time', label: 'Completed At'}},
         {{key: 'success', label: 'Success'}},
+        {{key: 'training_objective', label: 'Objective'}},
+        {{key: 'stable_band_direction', label: 'Direction'}},
         {{key: 'total_return_pct', label: 'Total Return %'}},
+        {{key: 'total_abs_return_pct', label: 'Total Abs %'}},
         {{key: 'average_monthly_return_pct', label: 'Avg Monthly %'}},
         {{key: 'total_trades', label: 'Trades'}},
-        {{key: 'profit_factor', label: 'Profit Factor'}},
         {{key: 'max_drawdown_pct', label: 'Max DD %'}},
-        {{key: 'positive_active_month_ratio', label: 'Positive Active Month Ratio'}},
+        {{key: 'direction_month_ratio', label: 'Direction Month Ratio'}},
       ];
       document.getElementById('allCyclesTable').innerHTML = renderTable(rows, columns);
       document.getElementById('totalCount').textContent = String(rows.length);
@@ -534,6 +682,13 @@ def _to_int(value: Any) -> int:
         return int(value)
     except (TypeError, ValueError):
         return 0
+
+
+def _to_float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _display_path(path: Path) -> str:

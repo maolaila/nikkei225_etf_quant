@@ -99,3 +99,43 @@ def test_training_cycle_report_archives_current_cycle_and_renders_dropdown(tmp_p
     assert "candidate_001" in text
     assert "Main Backtest Monthly Returns" in text
     assert "Batch Search Runs" in text
+    assert '"return_pct": "该月收益率，单位为百分比。"' in text
+    assert 'title="${escapeHtml(title)}"' in text
+    assert "numeric.toFixed(2)" in text
+
+
+def test_training_cycle_report_can_filter_batch_objective(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    state_path = tmp_path / ".codex_quant_agent" / "state" / "state.json"
+    reports_root = tmp_path / "data" / "reports"
+    state = {
+        "history": [
+            {
+                "time": "2026-05-17T14:00:00+09:00",
+                "event": "regression-result",
+                "data": {
+                    "regression_cycles": 31,
+                    "metrics": {"total_return_pct": -1.0, "total_trades": 50},
+                },
+            }
+        ]
+    }
+    _write_json(state_path, state)
+
+    profit_dir = reports_root / "experiments" / "batch_search_profit"
+    stable_dir = reports_root / "experiments" / "batch_search_stable"
+    _write_json(profit_dir / "summary.json", {"objective": "profit", "best_candidate": {"candidate_id": "old"}})
+    _write_csv(profit_dir / "ranking.csv", [{"rank": 1, "candidate_id": "old"}])
+    _write_json(stable_dir / "summary.json", {"objective": "stable-band", "best_candidate": {"candidate_id": "new"}})
+    _write_csv(stable_dir / "ranking.csv", [{"rank": 1, "candidate_id": "new"}])
+
+    path = generate_training_cycle_report(
+        state_path=state_path,
+        reports_root=reports_root,
+        objective_filter="stable-band",
+    )
+    text = path.read_text(encoding="utf-8")
+
+    assert "stable-band" in text
+    assert "new" in text
+    assert '"candidate_id": "old"' not in text

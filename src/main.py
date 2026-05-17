@@ -15,11 +15,13 @@ from src.data.replay_feed import replay_date
 from src.data.symbol_probe import probe_symbols
 from src.data.validator import validate_normalized_data
 from src.experiments.batch_search import run_batch_search
+from src.experiments.event_sensitivity import run_event_sensitivity_backtests
 from src.experiments.train_until_target import TargetGates, run_train_until_target
 from src.features.feature_pipeline import build_features
 from src.labeling.future_return_labeler import build_labels
 from src.paper.realtime_runner import run_paper_trade
 from src.review.training_cycle_report import generate_training_cycle_report
+from src.validation.event_audit import run_event_audit
 from src.validation.walk_forward import run_walk_forward
 
 
@@ -99,6 +101,13 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("--start")
     validate.add_argument("--end")
 
+    event_audit = sub.add_parser("event-audit", parents=[config_parent])
+    event_audit.add_argument("--output-dir", default=None)
+
+    event_sensitivity = sub.add_parser("event-sensitivity", parents=[config_parent])
+    event_sensitivity.add_argument("--output-root", default="data/reports/event_sensitivity")
+    event_sensitivity.add_argument("--model", default="latest")
+
     features = sub.add_parser("build-features", parents=[config_parent])
     features.add_argument("--start")
     features.add_argument("--end")
@@ -123,16 +132,28 @@ def build_parser() -> argparse.ArgumentParser:
     cycle_report.add_argument("--reports-root", default="data/reports")
     cycle_report.add_argument("--output", default=None)
     cycle_report.add_argument("--archive-current", action="store_true")
+    cycle_report.add_argument("--objective-filter", default=None)
 
     batch = sub.add_parser("batch-search", parents=[config_parent])
     batch.add_argument("--candidates", type=int, default=24)
     batch.add_argument("--seed", type=int, default=42)
+    batch.add_argument("--objective", choices=["profit", "stable-loss", "stable-band"], default="profit")
+    batch.add_argument("--risk-profile", choices=["default", "aggressive"], default="default")
     batch.add_argument("--target-monthly-return-pct", type=float, default=3.0)
+    batch.add_argument("--target-monthly-loss-pct", type=float, default=5.0)
+    batch.add_argument("--target-total-loss-pct", type=float, default=5.0)
+    batch.add_argument("--max-total-loss-pct", type=float, default=20.0)
+    batch.add_argument("--target-total-abs-return-pct", type=float, default=None)
+    batch.add_argument("--max-total-abs-return-pct", type=float, default=None)
     batch.add_argument("--min-trades", type=int, default=50)
     batch.add_argument("--min-profit-factor", type=float, default=1.2)
     batch.add_argument("--max-drawdown-pct", type=float, default=15.0)
     batch.add_argument("--min-positive-month-ratio", type=float, default=0.55)
+    batch.add_argument("--max-positive-month-ratio", type=float, default=0.20)
     batch.add_argument("--min-monthly-return-floor-pct", type=float, default=-8.0)
+    batch.add_argument("--min-negative-month-ratio", type=float, default=0.60)
+    batch.add_argument("--min-stable-month-ratio", type=float, default=0.60)
+    batch.add_argument("--min-loss-month-ratio", type=float, default=0.0)
     batch.add_argument("--min-walk-forward-windows", type=int, default=6)
     batch.add_argument("--output-root", default="data/reports/experiments")
     batch.add_argument("--skip-pipeline", action="store_true")
@@ -151,6 +172,7 @@ def build_parser() -> argparse.ArgumentParser:
     train_until.add_argument("--model", default=None)
     train_until.add_argument("--output-root", default="data/reports/long_run")
     train_until.add_argument("--force-rebuild", action="store_true")
+    train_until.add_argument("--skip-event-sensitivity", action="store_true")
 
     replay = sub.add_parser("replay", parents=[config_parent])
     replay.add_argument("--date", required=True)
@@ -208,6 +230,19 @@ def main(argv: list[str] | None = None) -> int:
         print(report)
         return 0
 
+    if args.command == "event-audit":
+        ensure_raw_normalized(config)
+        result = run_event_audit(config, output_dir=args.output_dir)
+        print(result.summary)
+        print(f"wrote {result.output_dir}")
+        return 0
+
+    if args.command == "event-sensitivity":
+        ensure_pipeline(config)
+        result = run_event_sensitivity_backtests(config, output_root=args.output_root, model_name=args.model)
+        print(result)
+        return 0
+
     if args.command == "build-features":
         ensure_raw_normalized(config, args.start, args.end)
         frame, path = build_features(config)
@@ -251,6 +286,7 @@ def main(argv: list[str] | None = None) -> int:
             reports_root=args.reports_root,
             output_path=args.output,
             archive_current=args.archive_current,
+            objective_filter=args.objective_filter,
         )
         print(f"wrote {path}")
         return 0
@@ -262,12 +298,23 @@ def main(argv: list[str] | None = None) -> int:
             config,
             candidates=args.candidates,
             seed=args.seed,
+            objective=args.objective,
+            risk_profile=args.risk_profile,
             target_monthly_return_pct=args.target_monthly_return_pct,
+            target_monthly_loss_pct=args.target_monthly_loss_pct,
+            target_total_loss_pct=args.target_total_loss_pct,
+            max_total_loss_pct=args.max_total_loss_pct,
+            target_total_abs_return_pct=args.target_total_abs_return_pct,
+            max_total_abs_return_pct=args.max_total_abs_return_pct,
             min_trades=args.min_trades,
             min_profit_factor=args.min_profit_factor,
             max_drawdown_pct=args.max_drawdown_pct,
             min_positive_month_ratio=args.min_positive_month_ratio,
+            max_positive_month_ratio=args.max_positive_month_ratio,
             min_monthly_return_floor_pct=args.min_monthly_return_floor_pct,
+            min_negative_month_ratio=args.min_negative_month_ratio,
+            min_stable_month_ratio=args.min_stable_month_ratio,
+            min_loss_month_ratio=args.min_loss_month_ratio,
             min_walk_forward_windows=args.min_walk_forward_windows,
             output_root=args.output_root,
         )
@@ -279,6 +326,13 @@ def main(argv: list[str] | None = None) -> int:
                 "score",
                 "passes_target",
                 "average_monthly_return_pct",
+                "total_return_pct",
+                "total_abs_return_pct",
+                "dominant_month_ratio",
+                "loss_month_ratio",
+                "negative_month_ratio",
+                "total_loss_pct",
+                "drawdown_loss_pct",
                 "total_trades",
                 "profit_factor",
                 "max_drawdown_pct",
@@ -304,6 +358,7 @@ def main(argv: list[str] | None = None) -> int:
                 min_monthly_return_floor_pct=args.min_monthly_return_floor_pct,
                 min_walk_forward_windows=args.min_walk_forward_windows,
             ),
+            run_event_sensitivity=not args.skip_event_sensitivity,
         )
         print(result)
         return 0

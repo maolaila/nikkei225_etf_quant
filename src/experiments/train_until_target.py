@@ -13,10 +13,12 @@ from src.config.loader import deep_merge
 from src.data.cleaner import normalize_bars
 from src.data.data_lake import DataLake
 from src.experiments.batch_search import candidate_passes_target, run_batch_search
+from src.experiments.event_sensitivity import run_event_sensitivity_backtests
 from src.features.feature_pipeline import build_features
 from src.labeling.future_return_labeler import build_labels
 from src.utils.paths import ensure_dir
 from src.utils.serialization import write_json
+from src.validation.event_audit import run_event_audit
 from src.validation.walk_forward import run_walk_forward
 
 
@@ -63,6 +65,7 @@ def run_train_until_target(
     model_name: str | None = None,
     output_root: str | Path = "data/reports/long_run",
     gates: TargetGates | None = None,
+    run_event_sensitivity: bool = True,
 ) -> dict[str, Any]:
     gates = gates or TargetGates()
     run_dir = ensure_dir(Path(output_root) / f"train_until_target_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
@@ -76,6 +79,11 @@ def run_train_until_target(
     pipeline_summary = _ensure_training_pipeline(config, model_name=model_name)
     baseline_metrics, _, _, _ = run_backtest(_with_report_dir(config, run_dir / "baseline"), model_name="latest")
     baseline_passes = candidate_passes_target(baseline_metrics, **gates.as_kwargs())
+    event_sensitivity_summary = (
+        run_event_sensitivity_backtests(config, output_root=run_dir / "event_sensitivity", model_name="latest")
+        if run_event_sensitivity and pipeline_summary.get("event_audit")
+        else {}
+    )
     cycles: list[dict[str, Any]] = []
     best_row: dict[str, Any] | None = None
     passing_row: dict[str, Any] | None = None
@@ -115,6 +123,7 @@ def run_train_until_target(
                 "pipeline": pipeline_summary,
                 "baseline_passes": baseline_passes,
                 "baseline_metrics": baseline_metrics,
+                "event_sensitivity": event_sensitivity_summary,
                 "best_candidate": best_row,
                 "passing_candidate": passing_row,
                 "cycles": cycles,
@@ -131,6 +140,7 @@ def run_train_until_target(
         "pipeline": pipeline_summary,
         "baseline_passes": baseline_passes,
         "baseline_metrics": baseline_metrics,
+        "event_sensitivity": event_sensitivity_summary,
         "best_candidate": best_row,
         "passing_candidate": passing_row,
         "cycles": cycles,
@@ -162,10 +172,15 @@ def _ensure_training_pipeline(config: dict[str, Any], *, model_name: str | None)
         raise FileNotFoundError("Missing data/raw/minute_bars; import or download historical data first.")
     if not lake.exists("normalized", "minute_bars"):
         normalize_bars(config)
+    event_audit_summary: dict[str, Any] | None = None
+    if bool(config.get("historical", {}).get("event_audit", {}).get("enabled", True)):
+        event_audit = run_event_audit(config)
+        event_audit_summary = {**event_audit.summary, "output_dir": str(event_audit.output_dir)}
     features, features_path = build_features(config)
     labels, labels_path = build_labels(config)
     predictions, summary = run_walk_forward(config, model_name=model_name)
     return {
+        "event_audit": event_audit_summary,
         "features_rows": int(len(features)),
         "features_path": features_path,
         "labels_rows": int(len(labels)),
@@ -205,6 +220,34 @@ def _render_report(result: dict[str, Any]) -> str:
             lines.append(f"- {key}: {best.get(key)}")
     else:
         lines.append("No searched candidate was evaluated.")
+    event_audit = (result.get("pipeline") or {}).get("event_audit") or {}
+    if event_audit:
+        lines.extend(
+            [
+                "",
+                "## Event Audit",
+                "",
+                f"- Output dir: {event_audit.get('output_dir')}",
+                f"- Market event dates: {', '.join(event_audit.get('event_dates', [])) or 'none'}",
+                f"- Corporate action candidate dates: {', '.join(event_audit.get('corporate_action_candidate_dates', [])) or 'none'}",
+                f"- Abnormal minute bars: {event_audit.get('abnormal_minute_bar_count', 0)}",
+            ]
+        )
+    event_sensitivity = result.get("event_sensitivity") or {}
+    if event_sensitivity:
+        lines.extend(
+            [
+                "",
+                "## Event Sensitivity",
+                "",
+                f"- Output root: {event_sensitivity.get('output_root')}",
+            ]
+        )
+        for row in event_sensitivity.get("scenarios", []):
+            lines.append(
+                f"- {row.get('scenario')}: total_return_pct={row.get('total_return_pct')}, "
+                f"trades={row.get('total_trades')}, blocked_signals={row.get('entry_date_filter_blocked_signals')}"
+            )
     lines.extend(["", "## Passing Candidate", ""])
     if passing:
         for key in ("rank", "candidate_id", "score", "average_monthly_return_pct", "total_return_pct", "total_trades", "profit_factor", "max_drawdown_pct", "report_dir"):
@@ -212,4 +255,3 @@ def _render_report(result: dict[str, Any]) -> str:
     else:
         lines.append("No candidate met all gates.")
     return "\n".join(lines) + "\n"
-

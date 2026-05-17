@@ -34,7 +34,7 @@ def test_monthly_returns_record_positive_and_negative_months(tmp_path):
     )
     text = html_path.read_text(encoding="utf-8")
     assert "<title>月度收益率记录</title>" in text
-    assert "月度收益率(%)" in text
+    assert "Monthly Return (%)" in text
     assert "字段关系" in text
     assert "filterInput" in text
     assert "2026-02" in text

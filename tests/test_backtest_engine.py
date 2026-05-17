@@ -74,6 +74,57 @@ def test_backtest_engine_logs_buy_and_sell(monkeypatch, tmp_path):
     assert {"reference_price", "commission_jpy", "execution_cost_bps", "market_impact_bps"}.issubset(trade_log.columns)
 
 
+def test_backtest_engine_applies_opt_in_take_profit(monkeypatch, tmp_path):
+    fake = FakeLake()
+    fake.signals = pd.DataFrame(
+        {
+            "timestamp": [fake.bars["timestamp"].iloc[5], fake.bars["timestamp"].iloc[10]],
+            "predicted_action": [1, 0],
+            "action_name": ["long_1x", "flat"],
+            "confidence": [0.9, 0.9],
+            "reason": ["take profit entry", "take profit check"],
+            "market_regime": ["trend", "trend"],
+        }
+    )
+    monkeypatch.setattr("src.backtest.engine.DataLake", lambda: fake)
+    monkeypatch.setattr("src.backtest.engine.output_dir", lambda config: tmp_path)
+    monkeypatch.setattr("src.backtest.engine.write_backtest_report", lambda *args, **kwargs: tmp_path / "report.md")
+    config = {
+        "backtest": {
+            "initial_cash_jpy": 100000,
+            "execution": {"signal_delay_bars": 1, "slippage_bps": 0, "fallback_spread_bps": 0},
+            "cost": {"commission_rate_pct": 0, "fixed_commission_jpy": 0},
+            "risk": {"max_trades_per_day": 3},
+            "position_limits": {"long_1x": {"max_equity_pct": 50}},
+            "report": {"output_dir": str(tmp_path)},
+        },
+        "strategy": {
+            "exit": {
+                "max_holding_minutes": 60,
+                "force_exit_time": "15:10",
+                "stop_loss_pct": {"long_1x": 5},
+                "take_profit": {"enabled": True, "pct": {"long_1x": 0.1}},
+            }
+        },
+        "model": {"prediction": {"min_confidence": 0.55}},
+        "etf_universe": {
+            "long_1x": {
+                "direction": 1,
+                "leverage": 1,
+                "candidates": [{"symbol": "1321", "enabled": True, "priority": 1}],
+            }
+        },
+    }
+
+    _, trade_log, _, _ = run_backtest(config)
+
+    buy = trade_log[trade_log["action"] == "BUY"].iloc[0]
+    sell = trade_log[trade_log["action"] == "SELL"].iloc[0]
+    assert buy["take_profit_pct"] == 0.1
+    assert sell["exit_reason"] == "take_profit"
+    assert sell["pnl_jpy"] > 0
+
+
 def test_backtest_engine_applies_action_probability_gate(monkeypatch, tmp_path):
     fake = FakeLake()
     fake.signals = pd.DataFrame(
@@ -178,6 +229,47 @@ def test_backtest_engine_applies_entry_filter_without_rewriting_signal(monkeypat
     assert signals.iloc[0]["action_name"] == "long_1x"
     assert signals.iloc[0]["entry_blocked"]
     assert signals.iloc[0]["entry_block_reason"] == "block_morning_trend_entries"
+
+
+def test_backtest_engine_applies_entry_date_filter_without_rewriting_signal(monkeypatch, tmp_path):
+    fake = FakeLake()
+    monkeypatch.setattr("src.backtest.engine.DataLake", lambda: fake)
+    monkeypatch.setattr("src.backtest.engine.output_dir", lambda config: tmp_path)
+    monkeypatch.setattr("src.backtest.engine.write_backtest_report", lambda *args, **kwargs: tmp_path / "report.md")
+    config = {
+        "backtest": {
+            "initial_cash_jpy": 100000,
+            "execution": {"signal_delay_bars": 1, "slippage_bps": 0, "fallback_spread_bps": 0},
+            "cost": {"commission_rate_pct": 0, "fixed_commission_jpy": 0},
+            "risk": {"max_trades_per_day": 3},
+            "position_limits": {"long_1x": {"max_equity_pct": 50}},
+            "entry_date_filter": {
+                "enabled": True,
+                "name": "exclude_market_event_days",
+                "mode": "exclude",
+                "dates": ["2026-01-05"],
+            },
+            "report": {"output_dir": str(tmp_path)},
+        },
+        "strategy": {"exit": {"max_holding_minutes": 60, "force_exit_time": "15:10", "stop_loss_pct": {"long_1x": 5}}},
+        "model": {"prediction": {"min_confidence": 0.55}},
+        "etf_universe": {
+            "long_1x": {
+                "direction": 1,
+                "leverage": 1,
+                "candidates": [{"symbol": "1321", "enabled": True, "priority": 1}],
+            }
+        },
+    }
+
+    metrics, trade_log, _, signals = run_backtest(config)
+
+    assert metrics["total_trades"] == 0
+    assert metrics["entry_date_filter_blocked_signals"] == 1
+    assert trade_log.empty
+    assert signals.iloc[0]["action_name"] == "long_1x"
+    assert signals.iloc[0]["entry_blocked"]
+    assert signals.iloc[0]["entry_block_reason"] == "exclude_market_event_days"
 
 
 def test_backtest_engine_applies_time_window_entry_filter(monkeypatch, tmp_path):
@@ -433,6 +525,57 @@ def test_backtest_engine_applies_position_sizing_adjustment_rule(monkeypatch, tm
                         "end_time": "09:30",
                         "multiplier": 0.40,
                     }
+                ]
+            },
+            "report": {"output_dir": str(tmp_path)},
+        },
+        "strategy": {"exit": {"max_holding_minutes": 60, "force_exit_time": "15:10", "stop_loss_pct": {"long_1x": 5}}},
+        "model": {"prediction": {"min_confidence": 0.55}},
+        "etf_universe": {
+            "long_1x": {
+                "direction": 1,
+                "leverage": 1,
+                "candidates": [{"symbol": "1321", "enabled": True, "priority": 1}],
+            }
+        },
+    }
+
+    _, trade_log, _, _ = run_backtest(config)
+
+    buy = trade_log[trade_log["action"] == "BUY"].iloc[0]
+    assert buy["target_equity_pct"] == 20
+    assert buy["sizing_multiplier"] == 0.40
+
+
+def test_backtest_engine_applies_confidence_bounded_position_sizing_adjustment(monkeypatch, tmp_path):
+    fake = FakeLake()
+    monkeypatch.setattr("src.backtest.engine.DataLake", lambda: fake)
+    monkeypatch.setattr("src.backtest.engine.output_dir", lambda config: tmp_path)
+    monkeypatch.setattr("src.backtest.engine.write_backtest_report", lambda *args, **kwargs: tmp_path / "report.md")
+    config = {
+        "backtest": {
+            "initial_cash_jpy": 100000,
+            "execution": {"signal_delay_bars": 1, "slippage_bps": 0, "fallback_spread_bps": 0},
+            "cost": {"commission_rate_pct": 0, "fixed_commission_jpy": 0},
+            "risk": {"max_trades_per_day": 3},
+            "position_limits": {"long_1x": {"max_equity_pct": 50, "absolute_max_equity_pct": 60}},
+            "position_sizing": {
+                "adjustments": [
+                    {
+                        "name": "skipped_too_low_confidence_ceiling",
+                        "actions": ["long_1x"],
+                        "max_confidence": 0.80,
+                        "multiplier": 0.10,
+                    },
+                    {
+                        "name": "high_confidence_stepdown",
+                        "actions": ["long_1x"],
+                        "min_confidence": 0.85,
+                        "max_confidence": 0.95,
+                        "min_action_probability": 0.85,
+                        "max_action_probability": 0.95,
+                        "multiplier": 0.40,
+                    },
                 ]
             },
             "report": {"output_dir": str(tmp_path)},

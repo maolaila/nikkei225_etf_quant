@@ -1,0 +1,65 @@
+# Candidate overlay only. Production YAML remains unchanged.
+# Iteration-4 bounded hypothesis:
+# The required 48-candidate sweep again selected candidate_019 as the strongest
+# sample-eligible shape, but rank-1 and the iteration-3 long_1x block still
+# lose money in morning trend long_2x trades. Retain the rank-1 gates, exits,
+# risk, costs, and the iteration-3 long_1x block; add one exposure stepdown
+# for morning trend long_2x entries so trade count remains testable.
+strategy:
+  entry_filters:
+    - name: "block_short_1x_all_regimes"
+      enabled: true
+      actions: ["short_1x"]
+    - name: "iteration_3_block_long_1x_all_regimes"
+      enabled: true
+      actions: ["long_1x"]
+    - name: "block_morning_trend_weak_actions"
+      enabled: true
+      actions: ["long_1x", "short_2x"]
+      sessions: ["morning"]
+      market_regimes: ["trend"]
+  exit:
+    max_holding_minutes: 30
+    stop_loss_pct:
+      long_2x: 1.2
+      short_2x: 0.5
+    dynamic_holding:
+      confidence_extend_multiplier: 1.2
+      max_minutes: 150
+    dynamic_stop_loss:
+      high_confidence_widen_multiplier: 1.25
+    exit_on_neutral_signal: true
+    exit_on_opposite_signal: true
+model:
+  prediction:
+    min_confidence: 0.3
+    min_action_probability: 0.3
+backtest:
+  position_limits:
+    long_2x:
+      max_equity_pct: 35
+      absolute_max_equity_pct: 50
+    short_2x:
+      max_equity_pct: 25
+      absolute_max_equity_pct: 30
+  position_sizing:
+    max_multiplier: 1.15
+    trend_multiplier: 1.0
+    adjustments:
+      - name: "iteration_4_morning_trend_long2x_stepdown"
+        enabled: true
+        actions: ["long_2x"]
+        sessions: ["morning"]
+        market_regimes: ["trend"]
+        multiplier: 0.50
+  risk:
+    max_trades_per_day: 4
+    max_daily_loss_pct: 1.2
+    max_consecutive_losses: 1
+    max_implied_dispersion_bps: 75
+  execution:
+    latency_bars: 1
+    slippage_bps: 5
+    fallback_spread_bps: 5
+  report:
+    output_dir: "data/reports/experiments/iteration_4_morning_trend_long2x_stepdown"

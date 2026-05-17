@@ -1,0 +1,52 @@
+# Candidate overlay only. Production YAML remains unchanged.
+# Cycle-2 bounded hypothesis after the required 48-candidate sweep:
+# candidate_019 was the best-ranked sample-eligible candidate, improving trade
+# count to 89 and drawdown to -1.45%, but 57 completed trades with confidence
+# <= 0.32 contributed -11029 JPY. Keep candidate_019 gates/exits/costs/risk
+# unchanged and apply only an opt-in low-confidence exposure stepdown.
+model:
+  prediction:
+    min_confidence: 0.3
+    min_action_probability: 0.3
+strategy:
+  exit:
+    max_holding_minutes: 30
+    stop_loss_pct:
+      long_2x: 1.2
+      short_2x: 0.5
+    dynamic_holding:
+      confidence_extend_multiplier: 1.2
+      max_minutes: 150
+    dynamic_stop_loss:
+      high_confidence_widen_multiplier: 1.25
+    exit_on_neutral_signal: true
+    exit_on_opposite_signal: true
+backtest:
+  position_limits:
+    long_2x:
+      max_equity_pct: 35
+      absolute_max_equity_pct: 50
+    short_2x:
+      max_equity_pct: 25
+      absolute_max_equity_pct: 30
+  position_sizing:
+    max_multiplier: 1.15
+    trend_multiplier: 1.0
+    adjustments:
+      - name: "cycle_2_low_confidence_stepdown"
+        enabled: true
+        max_confidence: 0.35
+        max_action_probability: 0.35
+        actions: ["long_1x", "long_2x", "short_2x"]
+        multiplier: 0.35
+  risk:
+    max_trades_per_day: 4
+    max_daily_loss_pct: 1.2
+    max_consecutive_losses: 1
+    max_implied_dispersion_bps: 75
+  execution:
+    latency_bars: 1
+    slippage_bps: 5
+    fallback_spread_bps: 5
+  report:
+    output_dir: "data/reports/experiments/strategy_optimizer_cycle_2_candidate019_low_confidence_stepdown"

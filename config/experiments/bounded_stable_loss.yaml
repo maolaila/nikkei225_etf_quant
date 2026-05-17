@@ -1,0 +1,81 @@
+# Research-only bounded exposure profile for finding moderate stable-loss candidates.
+# It keeps model-predicted directions intact and uses risk caps to avoid wipeout candidates.
+model:
+  prediction:
+    min_confidence: 0.25
+    min_action_probability: 0.25
+
+strategy:
+  entry_filters:
+    - name: "block_short_1x_all_regimes"
+      enabled: false
+      actions: ["short_1x"]
+    - name: "block_morning_trend_weak_actions"
+      enabled: false
+      actions: ["long_1x", "short_2x"]
+      sessions: ["morning"]
+      market_regimes: ["trend"]
+  exit:
+    max_holding_minutes: 60
+    exit_on_opposite_signal: true
+    exit_on_neutral_signal: false
+    stop_loss_pct:
+      long_1x: 1.0
+      long_2x: 1.5
+      short_1x: 1.0
+      short_2x: 1.5
+    dynamic_holding:
+      confidence_extend_multiplier: 1.5
+      low_confidence_multiplier: 1.0
+      trend_multiplier: 1.2
+      range_multiplier: 1.0
+      unknown_regime_multiplier: 1.0
+      leveraged_etf_multiplier: 1.0
+      max_minutes: 120
+    dynamic_stop_loss:
+      high_confidence_widen_multiplier: 1.4
+      low_confidence_tighten_multiplier: 1.0
+      trend_widen_multiplier: 1.2
+      range_tighten_multiplier: 1.0
+      min_pct:
+        long_1x: 0.4
+        long_2x: 0.7
+        short_1x: 0.4
+        short_2x: 0.7
+      max_pct:
+        long_1x: 2.5
+        long_2x: 3.5
+        short_1x: 2.5
+        short_2x: 3.5
+
+backtest:
+  risk:
+    max_daily_loss_pct: 5.0
+    max_trades_per_day: 6
+    max_consecutive_losses: 10
+    max_implied_dispersion_bps: 100
+    realized_loss_gate:
+      enabled: false
+  position_limits:
+    long_1x:
+      max_equity_pct: 45
+      absolute_max_equity_pct: 60
+    long_2x:
+      max_equity_pct: 45
+      absolute_max_equity_pct: 60
+    short_1x:
+      max_equity_pct: 35
+      absolute_max_equity_pct: 50
+    short_2x:
+      max_equity_pct: 45
+      absolute_max_equity_pct: 60
+  position_sizing:
+    confidence_floor: 0.20
+    confidence_full: 0.75
+    min_multiplier: 0.70
+    max_multiplier: 1.50
+    min_equity_pct: 5
+    trend_multiplier: 1.20
+    range_multiplier: 1.00
+    unknown_regime_multiplier: 1.00
+    leveraged_etf_multiplier: 1.10

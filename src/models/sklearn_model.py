@@ -51,6 +51,10 @@ class SklearnClassifierModel(BaseModel):
         y_frame = labels[["timestamp", "action"]].copy()
         y_frame["timestamp"] = pd.to_datetime(y_frame["timestamp"])
         merged = merged.merge(y_frame, on="timestamp", how="inner")
+        exclude_dates = _training_exclude_dates(self.config)
+        if exclude_dates:
+            trade_dates = merged["timestamp"].dt.strftime("%Y-%m-%d")
+            merged = merged[~trade_dates.isin(exclude_dates)].reset_index(drop=True)
         if merged.empty or merged["action"].nunique() < 2:
             return self
         self.feature_columns = _feature_columns(merged)
@@ -153,6 +157,25 @@ class RandomForestModel(SklearnClassifierModel):
 def _feature_columns(frame: pd.DataFrame) -> list[str]:
     numeric_columns = frame.select_dtypes(include=[np.number]).columns
     return [column for column in numeric_columns if column not in EXCLUDED_FEATURE_COLUMNS]
+
+
+def _training_exclude_dates(config: dict[str, Any]) -> set[str]:
+    raw = config.get("model", {}).get("training", {}).get("exclude_event_dates", [])
+    if raw in (None, ""):
+        return set()
+    if isinstance(raw, str):
+        values = [raw]
+    else:
+        try:
+            values = list(raw)
+        except TypeError:
+            values = [raw]
+    dates: set[str] = set()
+    for item in values:
+        if item in (None, ""):
+            continue
+        dates.add(str(pd.Timestamp(item).date()))
+    return dates
 
 
 def _clean_features(frame: pd.DataFrame, columns: list[str]) -> pd.DataFrame:

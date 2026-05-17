@@ -1,0 +1,75 @@
+# Candidate overlay only. Production YAML remains unchanged.
+# Cycle-17 bounded hypothesis: the fresh 48-candidate sweep again selected a
+# candidate_019 shape that improved sample size and drawdown but still lost
+# money. The strongest prior sample-eligible overlay in this workspace already
+# blocks loss-only long_1x entries and throttles morning trend long_2x sizing.
+# Keep those gates/exits/risk/costs and add only one new behavior: block
+# short_2x entries during afternoon trend regimes, the next residual loss
+# cluster with enough remaining trades to preserve the sample-size gate.
+model:
+  prediction:
+    min_confidence: 0.30
+    min_action_probability: 0.30
+
+strategy:
+  entry_filters:
+    - name: "block_short_1x_all_regimes"
+      enabled: true
+      actions: ["short_1x"]
+    - name: "block_long_1x_all_regimes"
+      enabled: true
+      actions: ["long_1x"]
+    - name: "block_morning_trend_weak_actions"
+      enabled: true
+      actions: ["long_1x", "short_2x"]
+      sessions: ["morning"]
+      market_regimes: ["trend"]
+    - name: "block_afternoon_trend_short_2x_entries"
+      enabled: true
+      actions: ["short_2x"]
+      sessions: ["afternoon"]
+      market_regimes: ["trend"]
+  exit:
+    max_holding_minutes: 30
+    stop_loss_pct:
+      long_2x: 1.20
+      short_2x: 0.50
+    dynamic_holding:
+      confidence_extend_multiplier: 1.20
+      max_minutes: 150
+    dynamic_stop_loss:
+      high_confidence_widen_multiplier: 1.25
+    exit_on_neutral_signal: true
+    exit_on_opposite_signal: true
+
+backtest:
+  position_limits:
+    long_2x:
+      max_equity_pct: 35
+      absolute_max_equity_pct: 50
+    short_2x:
+      max_equity_pct: 25
+      absolute_max_equity_pct: 30
+  position_sizing:
+    max_multiplier: 1.15
+    trend_multiplier: 1.00
+    adjustments:
+      - name: "throttle_morning_trend_long_2x"
+        enabled: true
+        actions: ["long_2x"]
+        sessions: ["morning"]
+        market_regimes: ["trend"]
+        start_time: "09:00"
+        end_time: "10:59"
+        multiplier: 0.70
+  risk:
+    max_trades_per_day: 4
+    max_daily_loss_pct: 1.20
+    max_consecutive_losses: 1
+    max_implied_dispersion_bps: 75
+  execution:
+    latency_bars: 1
+    slippage_bps: 5
+    fallback_spread_bps: 5
+  report:
+    output_dir: "data/reports/experiments/strategy_optimizer_cycle_17_afternoon_trend_short2x_block"

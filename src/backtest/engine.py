@@ -69,11 +69,13 @@ class BacktestEngine:
         self.exit_if_no_profit_after_minutes = int(exit_config.get("exit_if_no_profit_after_minutes", 0) or 0)
         self.dynamic_holding_config = exit_config.get("dynamic_holding", {})
         self.dynamic_stop_config = exit_config.get("dynamic_stop_loss", {})
+        self.take_profit_config = exit_config.get("take_profit", {})
         prediction_config = config.get("model", {}).get("prediction", {})
         self.min_confidence = float(prediction_config.get("min_confidence", 0.55))
         self.min_action_probability = float(prediction_config.get("min_action_probability", self.min_confidence))
         self.position_sizing_config = config.get("backtest", {}).get("position_sizing", {})
         self.entry_filters = self._load_entry_filters()
+        self.entry_date_filter = self._load_entry_date_filter()
         self.realized_loss_gate_enabled = bool(
             config.get("backtest", {}).get("risk", {}).get("realized_loss_gate", {}).get("enabled", False)
         )
@@ -208,6 +210,11 @@ class BacktestEngine:
         metrics["walk_forward_windows"] = int(walk_forward_summary.get("windows", 0)) if walk_forward_summary else 0
         metrics["walk_forward_fallback_used"] = bool(walk_forward_summary.get("fallback_used", False)) if walk_forward_summary else True
         metrics["walk_forward_rows"] = int(walk_forward_summary.get("rows", 0)) if walk_forward_summary else 0
+        metrics["entry_date_filter_enabled"] = bool(self.entry_date_filter.get("enabled", False))
+        metrics["entry_date_filter_name"] = str(self.entry_date_filter.get("name", ""))
+        metrics["entry_date_filter_mode"] = str(self.entry_date_filter.get("mode", ""))
+        metrics["entry_date_filter_dates"] = sorted(self.entry_date_filter.get("dates", set()))
+        metrics["entry_date_filter_blocked_signals"] = self._entry_date_filter_blocked_count(signals)
         out = output_dir(self.config)
         write_json(out / "metrics.json", metrics)
         write_backtest_report(self.config, metrics, trade_log, equity_curve, signals)
@@ -269,8 +276,16 @@ class BacktestEngine:
             )
             for row in annotated.itertuples(index=False)
         ]
-        annotated["entry_blocked"] = [bool(reason) for reason in reasons]
-        annotated["entry_block_reason"] = reasons
+        date_reasons = [
+            self._entry_date_block_reason(
+                action_name=str(row.action_name),
+                timestamp=pd.Timestamp(row.timestamp),
+            )
+            for row in annotated.itertuples(index=False)
+        ]
+        combined = [_join_reasons(reason, date_reason) for reason, date_reason in zip(reasons, date_reasons)]
+        annotated["entry_blocked"] = [bool(reason) for reason in combined]
+        annotated["entry_block_reason"] = combined
         return annotated
 
     def _load_entry_filters(self) -> list[dict[str, Any]]:
@@ -297,6 +312,35 @@ class BacktestEngine:
                 }
             )
         return loaded
+
+    def _load_entry_date_filter(self) -> dict[str, Any]:
+        raw_filter = self.config.get("backtest", {}).get("entry_date_filter", {})
+        if not isinstance(raw_filter, dict) or raw_filter.get("enabled", False) is not True:
+            return {"enabled": False, "name": "", "mode": "", "dates": set()}
+        dates = _date_set(raw_filter.get("dates"))
+        if not dates:
+            return {"enabled": False, "name": "", "mode": "", "dates": set()}
+        mode = str(raw_filter.get("mode", "exclude"))
+        if mode not in {"exclude", "include"}:
+            raise ValueError(f"Expected entry_date_filter mode to be exclude or include; got {mode!r}")
+        return {
+            "enabled": True,
+            "name": str(raw_filter.get("name", f"entry_date_filter_{mode}")),
+            "mode": mode,
+            "dates": dates,
+        }
+
+    def _entry_date_block_reason(self, action_name: str, timestamp: pd.Timestamp) -> str:
+        if action_name == "flat" or not bool(self.entry_date_filter.get("enabled", False)):
+            return ""
+        trade_date = pd.Timestamp(timestamp).strftime("%Y-%m-%d")
+        dates = self.entry_date_filter.get("dates", set())
+        mode = str(self.entry_date_filter.get("mode", "exclude"))
+        if mode == "exclude" and trade_date in dates:
+            return str(self.entry_date_filter.get("name", "entry_date_filter_exclude"))
+        if mode == "include" and trade_date not in dates:
+            return str(self.entry_date_filter.get("name", "entry_date_filter_include"))
+        return ""
 
     def _entry_block_reason(
         self,
@@ -400,6 +444,12 @@ class BacktestEngine:
             signals.at[row_index, "entry_blocked"] = True
             signals.at[row_index, "entry_block_reason"] = "; ".join(part for part in (existing, reason) if part)
 
+    def _entry_date_filter_blocked_count(self, signals: pd.DataFrame) -> int:
+        name = str(self.entry_date_filter.get("name", ""))
+        if not name or "entry_block_reason" not in signals:
+            return 0
+        return int(signals["entry_block_reason"].fillna("").astype(str).str.contains(name, regex=False).sum())
+
     @staticmethod
     def _signal_action_probability(signal: Any) -> float:
         action_name = str(getattr(signal, "action_name", ACTION_ID_TO_NAME.get(int(getattr(signal, "predicted_action", 0)), "flat")))
@@ -467,6 +517,7 @@ class BacktestEngine:
             absolute_max_equity_pct=sizing["absolute_max_equity_pct"],
             max_holding_minutes=int(sizing["max_holding_minutes"]),
             stop_loss_pct=sizing["stop_loss_pct"],
+            take_profit_pct=sizing["take_profit_pct"],
             market_regime=sizing["market_regime"],
         )
         return position, cash_after, self._trade_row(
@@ -496,6 +547,7 @@ class BacktestEngine:
             absolute_max_equity_pct=sizing["absolute_max_equity_pct"],
             max_holding_minutes=int(sizing["max_holding_minutes"]),
             stop_loss_pct=sizing["stop_loss_pct"],
+            take_profit_pct=sizing["take_profit_pct"],
         )
 
     def _close_position(
@@ -548,6 +600,7 @@ class BacktestEngine:
             absolute_max_equity_pct=position.absolute_max_equity_pct,
             max_holding_minutes=position.max_holding_minutes,
             stop_loss_pct=position.stop_loss_pct,
+            take_profit_pct=position.take_profit_pct,
         )
         return cash_after, row
 
@@ -558,6 +611,8 @@ class BacktestEngine:
         pnl_pct = position.unrealized_pct(current_price)
         if pnl_pct <= -abs(position.stop_loss_pct):
             return "stop_loss"
+        if position.take_profit_pct > 0 and pnl_pct >= abs(position.take_profit_pct):
+            return "take_profit"
         if (
             self.exit_if_no_profit_enabled
             and self.exit_if_no_profit_after_minutes > 0
@@ -644,6 +699,7 @@ class BacktestEngine:
         absolute_max_equity_pct: float = 0.0,
         max_holding_minutes: int = 0,
         stop_loss_pct: float = 0.0,
+        take_profit_pct: float = 0.0,
     ) -> dict[str, Any]:
         return {
             "timestamp": timestamp,
@@ -702,6 +758,7 @@ class BacktestEngine:
             "absolute_max_equity_pct": absolute_max_equity_pct,
             "max_holding_minutes": max_holding_minutes,
             "stop_loss_pct": stop_loss_pct,
+            "take_profit_pct": take_profit_pct,
         }
 
     def _dynamic_position_sizing(
@@ -751,8 +808,21 @@ class BacktestEngine:
             "absolute_max_equity_pct": absolute_max_pct,
             "max_holding_minutes": self._dynamic_max_holding_minutes(action_name, signal),
             "stop_loss_pct": self._dynamic_stop_loss_pct(action_name, signal),
+            "take_profit_pct": self._take_profit_pct(action_name),
             "market_regime": market_regime,
         }
+
+    def _take_profit_pct(self, action_name: str) -> float:
+        config = self.take_profit_config
+        if not isinstance(config, dict) or bool(config.get("enabled", False)) is not True:
+            return 0.0
+        pct_by_action = config.get("pct", {})
+        if isinstance(pct_by_action, dict) and action_name in pct_by_action:
+            return max(0.0, float(pct_by_action.get(action_name, 0.0) or 0.0))
+        multiplier = float(config.get("stop_loss_multiple", 0.0) or 0.0)
+        if multiplier <= 0:
+            return 0.0
+        return abs(self._base_stop_loss_pct(action_name)) * multiplier
 
     def _dynamic_max_holding_minutes(self, action_name: str, signal: Any) -> int:
         base_minutes = self.max_holding_minutes
@@ -783,7 +853,7 @@ class BacktestEngine:
         return int(round(_clamp(base_minutes * multiplier, min_minutes, max_minutes)))
 
     def _dynamic_stop_loss_pct(self, action_name: str, signal: Any) -> float:
-        base_pct = float(self.config.get("strategy", {}).get("exit", {}).get("stop_loss_pct", {}).get(action_name, 1.0))
+        base_pct = self._base_stop_loss_pct(action_name)
         config = self.dynamic_stop_config
         if not bool(config.get("enabled", False)):
             return base_pct
@@ -806,6 +876,9 @@ class BacktestEngine:
         max_pct = float(maximums.get(action_name, base_pct * 1.6)) if isinstance(maximums, dict) else base_pct * 1.6
         return _clamp(base_pct * multiplier, min_pct, max_pct)
 
+    def _base_stop_loss_pct(self, action_name: str) -> float:
+        return float(self.config.get("strategy", {}).get("exit", {}).get("stop_loss_pct", {}).get(action_name, 1.0))
+
     def _position_sizing_adjustment_multiplier(
         self,
         action_name: str,
@@ -820,6 +893,8 @@ class BacktestEngine:
         signal_timestamp = pd.Timestamp(_signal_value(signal, "timestamp"))
         execution_timestamp = pd.Timestamp(execution_timestamp) if execution_timestamp is not None else signal_timestamp
         market_regime = self._signal_market_regime(signal)
+        confidence = self._signal_confidence(signal)
+        action_probability = self._signal_action_probability(signal)
         multiplier = 1.0
         for adjustment in adjustments:
             if not isinstance(adjustment, dict) or adjustment.get("enabled", True) is False:
@@ -833,6 +908,18 @@ class BacktestEngine:
             if actions and action_name not in actions:
                 continue
             if market_regimes and market_regime not in market_regimes:
+                continue
+            if not _threshold_matches(
+                confidence,
+                min_value=adjustment.get("min_confidence"),
+                max_value=adjustment.get("max_confidence"),
+            ):
+                continue
+            if not _threshold_matches(
+                action_probability,
+                min_value=adjustment.get("min_action_probability"),
+                max_value=adjustment.get("max_action_probability"),
+            ):
                 continue
             if not _adjustment_time_matches(
                 time_basis=time_basis,
@@ -879,6 +966,28 @@ def _string_set(value: Any) -> set[str]:
         return {str(item) for item in value}
     except TypeError:
         return {str(value)}
+
+
+def _date_set(value: Any) -> set[str]:
+    if value is None:
+        return set()
+    if isinstance(value, str):
+        values = [value]
+    else:
+        try:
+            values = list(value)
+        except TypeError:
+            values = [value]
+    dates: set[str] = set()
+    for item in values:
+        if item in (None, ""):
+            continue
+        dates.add(str(pd.Timestamp(item).date()))
+    return dates
+
+
+def _join_reasons(*reasons: str) -> str:
+    return "; ".join(reason for reason in reasons if reason)
 
 
 def _time_string(value: Any) -> str:
@@ -943,6 +1052,14 @@ def _time_matches(timestamp: pd.Timestamp, start_time: str, end_time: str) -> bo
     if start_time:
         return hhmm >= start_time
     return hhmm <= end_time
+
+
+def _threshold_matches(value: float, *, min_value: Any = None, max_value: Any = None) -> bool:
+    if min_value not in (None, "") and value < _safe_float(min_value, float("-inf")):
+        return False
+    if max_value not in (None, "") and value > _safe_float(max_value, float("inf")):
+        return False
+    return True
 
 
 def _signal_value(signal: Any, key: str, default: Any = None) -> Any:

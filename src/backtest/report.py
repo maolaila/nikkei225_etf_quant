@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import html
 import math
 from pathlib import Path
 from numbers import Integral, Real
 from typing import Any
-import html
 
 import pandas as pd
 
@@ -13,47 +13,48 @@ from src.utils.serialization import read_json
 
 
 MONTHLY_RETURN_COLUMN_LABELS = {
-    "year_month": "年月",
-    "year": "年份",
-    "month": "月份",
-    "start_equity_jpy": "月初权益(JPY)",
-    "end_equity_jpy": "月末权益(JPY)",
-    "pnl_jpy": "月度盈亏(JPY)",
-    "return_pct": "月度收益率(%)",
+    "year_month": "Year-Month",
+    "year": "Year",
+    "month": "Month",
+    "start_equity_jpy": "Start Equity (JPY)",
+    "end_equity_jpy": "End Equity (JPY)",
+    "pnl_jpy": "Monthly PnL (JPY)",
+    "return_pct": "Monthly Return (%)",
 }
 
 TRADE_LOG_COLUMN_LABELS = {
-    "timestamp": "时间",
-    "action": "操作",
-    "symbol": "标的",
-    "reference_price": "参考价",
-    "price": "价格",
-    "quantity": "数量",
-    "notional_jpy": "成交金额(JPY)",
-    "commission_jpy": "手续费(JPY)",
-    "slippage_bps": "滑点(bps)",
-    "spread_bps": "点差(bps)",
-    "market_impact_bps": "市场冲击(bps)",
-    "execution_cost_bps": "执行成本(bps)",
-    "bar_turnover_jpy": "分钟成交额(JPY)",
-    "reason": "操作理由",
-    "exit_reason": "平仓理由",
-    "pnl_jpy": "盈亏(JPY)",
-    "pnl_pct": "收益率(%)",
-    "position_action": "持仓动作",
-    "trade_date": "交易日",
-    "year": "年份",
-    "month": "年月",
-    "session": "交易时段",
-    "market_regime": "市场状态",
-    "confidence": "模型置信度",
-    "action_probability": "动作概率",
-    "sizing_multiplier": "仓位倍率",
-    "base_equity_pct": "基准仓位(%)",
-    "target_equity_pct": "目标仓位(%)",
-    "absolute_max_equity_pct": "硬上限仓位(%)",
-    "max_holding_minutes": "最长持仓(分钟)",
-    "stop_loss_pct": "止损比例(%)",
+    "timestamp": "Timestamp",
+    "action": "Action",
+    "symbol": "Symbol",
+    "reference_price": "Reference Price",
+    "price": "Price",
+    "quantity": "Quantity",
+    "notional_jpy": "Notional (JPY)",
+    "commission_jpy": "Commission (JPY)",
+    "slippage_bps": "Slippage (bps)",
+    "spread_bps": "Spread (bps)",
+    "market_impact_bps": "Market Impact (bps)",
+    "execution_cost_bps": "Execution Cost (bps)",
+    "bar_turnover_jpy": "Minute Turnover (JPY)",
+    "reason": "Trade Reason",
+    "exit_reason": "Exit Reason",
+    "pnl_jpy": "PnL (JPY)",
+    "pnl_pct": "Return (%)",
+    "position_action": "Position Action",
+    "trade_date": "Trade Date",
+    "year": "Year",
+    "month": "Year-Month",
+    "session": "Session",
+    "market_regime": "Market Regime",
+    "confidence": "Model Confidence",
+    "action_probability": "Action Probability",
+    "sizing_multiplier": "Sizing Multiplier",
+    "base_equity_pct": "Base Equity (%)",
+    "target_equity_pct": "Target Equity (%)",
+    "absolute_max_equity_pct": "Absolute Max Equity (%)",
+    "max_holding_minutes": "Max Holding (minutes)",
+    "stop_loss_pct": "Stop Loss (%)",
+    "take_profit_pct": "Take Profit (%)",
 }
 
 TRADE_LOG_COLUMNS = [
@@ -113,6 +114,7 @@ TRADE_LOG_COLUMNS = [
     "absolute_max_equity_pct",
     "max_holding_minutes",
     "stop_loss_pct",
+    "take_profit_pct",
 ]
 
 SIGNED_COLUMNS = {"pnl_jpy", "pnl_pct", "return_pct"}
@@ -139,20 +141,23 @@ def write_backtest_report(
     write_filterable_table_html(
         monthly_returns,
         out / "monthly_returns.html",
-        "月度收益率记录",
+        "Monthly Returns",
         column_labels=MONTHLY_RETURN_COLUMN_LABELS,
         description=(
-            "字段关系：月度盈亏 = 月末权益 - 月初权益；"
-            "月度收益率 = 月度盈亏 / 月初权益 × 100%。"
-            "月度收益率逐月记录，可以为正数、负数或 0。"
+            "Monthly PnL equals end equity minus start equity. "
+            "Monthly return equals monthly PnL divided by start equity. "
+            "Every month is recorded, including positive, negative, and zero returns."
         ),
     )
     write_filterable_table_html(
         trade_log,
         out / "trade_log.html",
-        "模拟交易记录",
+        "Simulated Trade Log",
         column_labels=TRADE_LOG_COLUMN_LABELS,
-        description="每行是一笔模拟买入或卖出记录，包含价格、数量、操作理由、平仓理由以及已知盈亏。",
+        description=(
+            "Each row is a simulated buy or sell record with price, quantity, "
+            "trade reason, exit reason, and known PnL."
+        ),
     )
     lines = [
         "# Backtest Report",
@@ -221,7 +226,7 @@ def write_filterable_table_html(
     body = "\n".join(body_rows)
     description_html = f'  <div class="description">{html.escape(description)}</div>\n' if description else ""
     document = f"""<!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -243,8 +248,8 @@ def write_filterable_table_html(
 </head>
 <body>
   <h1>{html.escape(title)}</h1>
-{description_html}  <div class="meta">记录数：<span id="visibleCount">{len(rows)}</span> / {len(rows)}。输入关键字筛选；点击表头排序。</div>
-  <input id="filterInput" type="search" placeholder="输入关键字筛选...">
+{description_html}  <div class="meta">Rows: <span id="visibleCount">{len(rows)}</span> / {len(rows)}. Type to filter; click headers to sort.</div>
+  <input id="filterInput" type="search" placeholder="Filter rows...">
   <table id="dataTable">
     <thead><tr>{header}</tr></thead>
     <tbody>{body}</tbody>

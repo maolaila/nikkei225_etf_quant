@@ -11,6 +11,15 @@ historical:
     fail_on_missing_core_symbols: true
     allow_missing_volume: false
     max_missing_bar_pct_per_day: 2.0
+  event_audit:
+    enabled: true
+    output_dir: "data/reports/event_audit"
+    black_swan_abs_underlying_return_pct: 7.5
+    extreme_intraday_underlying_range_pct: 7.5
+    abnormal_minute_abs_underlying_return_pct: 1.0
+    corporate_action_raw_close_jump_ratio: 5.0
+    corporate_action_abs_close_return_pct: 50.0
+    max_rows_per_detail_report: 200
 
 market_calendar:
   timezone: "Asia/Tokyo"

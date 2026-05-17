@@ -42,15 +42,23 @@ param(
     [int]$SubagentStatusSeconds = 60,
     [int]$StalledSubagentMinutes = 30,
     [int]$MaxConsecutiveFailures = 20,
-    [double]$TargetTotalReturnPct = 3.0,
+    [double]$TargetTotalReturnPct = 5.0,
     [double]$TargetReturnIncrementPct = 2.0,
-    [double]$MaxTargetTotalReturnPct = 0,
+    [double]$MaxTargetTotalReturnPct = 20.0,
+    [ValidateSet("profit", "stable-band")]
+    [string]$TrainingObjective = "stable-band",
+    [double]$TargetTotalAbsReturnPct = 5.0,
+    [double]$MaxTotalAbsReturnPct = 20.0,
+    [double]$MinStableMonthRatio = 0.60,
+    [ValidateSet("default", "aggressive")]
+    [string]$BatchRiskProfile = "aggressive",
+    [string]$BatchConfigOverrides = "config/experiments/aggressive_stable_loss.yaml",
     [ValidateSet("average", "median", "minimum", "latest")]
     [string]$MonthlyReturnTargetMode = "average",
     [int]$MinTrades = 50,
     [double]$MinTotalReturnPct = 0.0,
     [double]$MinProfitFactor = 1.2,
-    [double]$MaxDrawdownPct = 15.0,
+    [double]$MaxDrawdownPct = 20.0,
     [double]$MinPositiveMonthRatio = 0.55,
     [double]$MinMonthlyReturnFloorPct = -8.0,
     [int]$MinWalkForwardWindows = 6,
@@ -127,6 +135,13 @@ function New-State {
         last_data_signature = $null
         current_target_total_return_pct = $TargetTotalReturnPct
         target_return_increment_pct = $TargetReturnIncrementPct
+        training_objective = $TrainingObjective
+        target_total_abs_return_pct = $TargetTotalAbsReturnPct
+        max_total_abs_return_pct = $MaxTotalAbsReturnPct
+        min_stable_month_ratio = $MinStableMonthRatio
+        stable_band_direction = $null
+        batch_risk_profile = $BatchRiskProfile
+        batch_config_overrides = $BatchConfigOverrides
         target_milestones = @()
         consecutive_failures = 0
         last_heartbeat = $null
@@ -153,6 +168,13 @@ function Ensure-StateShape {
         last_data_signature = $null
         current_target_total_return_pct = $TargetTotalReturnPct
         target_return_increment_pct = $TargetReturnIncrementPct
+        training_objective = $TrainingObjective
+        target_total_abs_return_pct = $TargetTotalAbsReturnPct
+        max_total_abs_return_pct = $MaxTotalAbsReturnPct
+        min_stable_month_ratio = $MinStableMonthRatio
+        stable_band_direction = $null
+        batch_risk_profile = $BatchRiskProfile
+        batch_config_overrides = $BatchConfigOverrides
         target_milestones = @()
         last_heartbeat = $null
         last_error = $null
@@ -423,19 +445,20 @@ $script:WorkspaceRoot
 Implementation spec:
 $script:SpecFile
 
-Current supervisor monthly return target:
-$(Get-CurrentReturnTargetPct)% monthly return using MonthlyReturnTargetMode=$MonthlyReturnTargetMode. When this target is stably achieved, the supervisor raises it by $TargetReturnIncrementPct percentage points and continues.
+Current supervisor objective:
+TrainingObjective=$TrainingObjective. For stable-band, accept either positive or negative return direction, but require a signed return band of +$TargetTotalAbsReturnPct%..+$MaxTotalAbsReturnPct% or -$MaxTotalAbsReturnPct%..-$TargetTotalAbsReturnPct%, monthly returns mostly matching that same direction with direction_month_ratio >= $MinStableMonthRatio, real non-synthetic data, and walk-forward validation. Consecutive successes must keep the same direction. The active batch risk profile is $BatchRiskProfile.
 
 Python runtime:
 $script:PythonExe
-Use this exact interpreter for project commands:
+The Codex runner already sets `$env:QUANT_PYTHON_EXE to this path before each subagent starts.
+Use this exact PowerShell invocation form for project commands; do not reassign `$env:QUANT_PYTHON_EXE, do not wrap the command target in quotes, and do not use bare python:
 & `$env:QUANT_PYTHON_EXE -m pytest
 & `$env:QUANT_PYTHON_EXE -m src.main walk-forward --model random_forest
 & `$env:QUANT_PYTHON_EXE -m src.main backtest --model latest
-& `$env:QUANT_PYTHON_EXE -m src.main batch-search --candidates 24 --target-monthly-return-pct $(Get-CurrentReturnTargetPct) --min-trades $MinTrades --min-profit-factor $MinProfitFactor --max-drawdown-pct $MaxDrawdownPct --min-positive-month-ratio $MinPositiveMonthRatio --min-monthly-return-floor-pct $MinMonthlyReturnFloorPct --min-walk-forward-windows $MinWalkForwardWindows
+& `$env:QUANT_PYTHON_EXE -m src.main batch-search --config-overrides $BatchConfigOverrides --candidates 24 --objective stable-band --risk-profile $BatchRiskProfile --target-total-abs-return-pct $TargetTotalAbsReturnPct --max-total-abs-return-pct $MaxTotalAbsReturnPct --max-drawdown-pct $MaxDrawdownPct --min-stable-month-ratio $MinStableMonthRatio --min-trades $MinTrades --min-walk-forward-windows $MinWalkForwardWindows
 Do not download Python, uv, package managers, or create a new .venv unless this interpreter is missing and commands fail.
 
-/goal Build, repair, expand data, backtest, audit, and iteratively improve this local project. The current monthly return target starts at $TargetTotalReturnPct percent and increases by $TargetReturnIncrementPct percentage points after each stable win, for example 3%, 5%, 7%. A stable win requires real non-synthetic data, walk_forward_windows >= $MinWalkForwardWindows without fallback single-split validation, total_return_pct > $MinTotalReturnPct, total_trades >= $MinTrades, profit_factor >= $MinProfitFactor, max_drawdown_pct no worse than -$MaxDrawdownPct, positive_active_month_ratio >= $MinPositiveMonthRatio, min_monthly_return_pct >= $MinMonthlyReturnFloorPct, monthly return metric >= current target, at least $MinRegressionCycles fresh regression cycles, and at least $RequiredConsecutiveSuccesses consecutive successful cycles at the current monthly return target. Every run must record monthly returns by year/month regardless of sign, with CSV and HTML table outputs. If data is synthetic, stale, exhausted, or too narrow, acquire/implement more historical data from configured APIs or safe public sources before trusting positive results. Keep iterating on evidence until the user manually stops the supervisor process or an explicit maximum target/stop option is reached.
+/goal Build, repair, expand data, backtest, audit, and iteratively improve this local project toward a stable-band target. A stable-band win accepts positive or negative total return, but only when total_return_pct fits one signed band (+$TargetTotalAbsReturnPct%..+$MaxTotalAbsReturnPct% or -$MaxTotalAbsReturnPct%..-$TargetTotalAbsReturnPct%), monthly returns mostly match that same direction with direction_month_ratio >= $MinStableMonthRatio, total_trades >= $MinTrades, max_drawdown_pct is no worse than -$MaxDrawdownPct, real non-synthetic data is used, walk_forward_windows >= $MinWalkForwardWindows, fallback single-split validation is false, at least $MinRegressionCycles fresh regression cycles have run, and at least $RequiredConsecutiveSuccesses consecutive cycles pass the stable-band gate without switching direction. Every run must record monthly returns by year/month regardless of sign, with CSV and HTML table outputs. If data is synthetic, stale, exhausted, or too narrow, acquire/implement more historical data from configured APIs or safe public sources before trusting results. Keep iterating on evidence until the user manually stops the supervisor process or the stable-band target is reached.
 
 Supervisor requirements:
 - Build and improve a Python 3.11 Nikkei 225 ETF historical backtest and paper-trading project according to the spec.
@@ -443,7 +466,7 @@ Supervisor requirements:
 - This project must remain historical_backtest / paper_trading / alert_only only. Keep live_trading.enabled=false and live_order_enabled=false.
 - Do not implement real-money order placement. Do not connect any broker order API except as disabled/stubbed paper-trading interfaces.
 - Do not promise guaranteed profit. Backtest profit is evidence to investigate, not a guarantee.
-- Profitability milestones are valid only when latest metrics have data_is_synthetic=false and real J-Quants/approved provider data. Synthetic data is allowed only for plumbing tests.
+- Stable-band milestones are valid only when latest metrics have data_is_synthetic=false and real J-Quants/approved provider data. Synthetic data is allowed only for plumbing tests.
 - Avoid future leakage. Use walk-forward validation and next-bar execution where applicable.
 - Every simulated buy/sell must be logged with timestamp, action, symbol, price, quantity, reason, exit reason when relevant, and PnL when known.
 - MinTrades is a sample-size validation gate, not a quota. Do not force trades when market conditions are unsuitable just to reach the trade count.
@@ -620,7 +643,19 @@ catch {
         Set-SupervisorHeartbeat -Context "waiting for subagent '$Role'"
     }
 
-    $process.Refresh()
+    try {
+        $process.Refresh()
+        if ($process.HasExited) {
+            # PowerShell can observe HasExited before ExitCode is populated for
+            # redirected hidden child processes. Wait once so wrapper failures
+            # do not become synthetic 999 exits.
+            $process.WaitForExit()
+            $process.Refresh()
+        }
+    }
+    catch {
+        Write-AgentMessage "Could not refresh completed subagent process '$Role': $($_.Exception.Message)"
+    }
     if ($null -eq $exitCode) {
         if (Test-Path -LiteralPath $exitCodeFile) {
             try {
@@ -1080,6 +1115,127 @@ function Get-LatestBacktestMetrics {
     return $null
 }
 
+function Get-LatestBatchSearchSummary {
+    param([datetime]$NotBefore = [datetime]::MinValue)
+
+    $experimentsRoot = Join-Path $script:WorkspaceRoot "data\reports\experiments"
+    if (-not (Test-Path -LiteralPath $experimentsRoot)) {
+        return $null
+    }
+
+    $summaryFiles = Get-ChildItem -LiteralPath $experimentsRoot -Directory -Filter "batch_search_*" |
+        Sort-Object LastWriteTime -Descending |
+        ForEach-Object {
+            $summaryPath = Join-Path $_.FullName "summary.json"
+            if (Test-Path -LiteralPath $summaryPath) {
+                Get-Item -LiteralPath $summaryPath
+            }
+        } |
+        Select-Object -First 20
+
+    foreach ($file in $summaryFiles) {
+        try {
+            if ($file.Length -gt 10MB) {
+                continue
+            }
+            if ($file.LastWriteTime -lt $NotBefore) {
+                continue
+            }
+
+            $json = Get-Content -Raw -LiteralPath $file.FullName -Encoding UTF8 | ConvertFrom-Json
+            $properties = @{}
+            foreach ($property in $json.PSObject.Properties) {
+                $properties[$property.Name] = $property
+            }
+
+            $best = $null
+            if ($properties.ContainsKey("best_candidate")) {
+                $best = $properties["best_candidate"].Value
+            }
+            $bestCandidateId = $null
+            $bestTotalReturnPct = $null
+            $bestAverageMonthlyReturnPct = $null
+            $bestProfitFactor = $null
+            if ($null -ne $best) {
+                if ($best.PSObject.Properties.Name -contains "candidate_id") {
+                    $bestCandidateId = [string]$best.candidate_id
+                }
+                if ($best.PSObject.Properties.Name -contains "total_return_pct" -and $null -ne $best.total_return_pct) {
+                    $bestTotalReturnPct = [double]$best.total_return_pct
+                }
+                if ($best.PSObject.Properties.Name -contains "average_monthly_return_pct" -and $null -ne $best.average_monthly_return_pct) {
+                    $bestAverageMonthlyReturnPct = [double]$best.average_monthly_return_pct
+                }
+                if ($best.PSObject.Properties.Name -contains "profit_factor" -and $null -ne $best.profit_factor) {
+                    $bestProfitFactor = [double]$best.profit_factor
+                }
+            }
+
+            $candidateCount = 0
+            if ($properties.ContainsKey("candidate_count") -and $null -ne $properties["candidate_count"].Value) {
+                $candidateCount = [int]$properties["candidate_count"].Value
+            }
+            $passingCandidateCount = 0
+            if ($properties.ContainsKey("passing_candidate_count") -and $null -ne $properties["passing_candidate_count"].Value) {
+                $passingCandidateCount = [int]$properties["passing_candidate_count"].Value
+            }
+            $requestedCandidateCount = $candidateCount
+            if ($properties.ContainsKey("requested_candidate_count") -and $null -ne $properties["requested_candidate_count"].Value) {
+                $requestedCandidateCount = [int]$properties["requested_candidate_count"].Value
+            }
+            $completedCandidateCount = $candidateCount
+            if ($properties.ContainsKey("completed_candidate_count") -and $null -ne $properties["completed_candidate_count"].Value) {
+                $completedCandidateCount = [int]$properties["completed_candidate_count"].Value
+            }
+            $completed = $true
+            if ($properties.ContainsKey("completed") -and $null -ne $properties["completed"].Value) {
+                $completed = [bool]$properties["completed"].Value
+            }
+
+            return [pscustomobject]@{
+                file = $file.FullName
+                candidate_count = $candidateCount
+                requested_candidate_count = $requestedCandidateCount
+                completed_candidate_count = $completedCandidateCount
+                completed = $completed
+                passing_candidate_count = $passingCandidateCount
+                best_candidate_id = $bestCandidateId
+                best_total_return_pct = $bestTotalReturnPct
+                best_average_monthly_return_pct = $bestAverageMonthlyReturnPct
+                best_profit_factor = $bestProfitFactor
+                last_write_time = $file.LastWriteTime.ToString("o")
+            }
+        }
+        catch {
+            continue
+        }
+    }
+
+    return $null
+}
+
+function Test-BacktestArtifactsReady {
+    param([Parameter(Mandatory = $false)]$Metrics)
+
+    if ($null -eq $Metrics -or -not ($Metrics.PSObject.Properties.Name -contains "file") -or [string]::IsNullOrWhiteSpace([string]$Metrics.file)) {
+        return $false
+    }
+
+    $metricsPath = [string]$Metrics.file
+    if (-not (Test-Path -LiteralPath $metricsPath)) {
+        return $false
+    }
+
+    $reportDir = Split-Path -Parent $metricsPath
+    foreach ($name in @("monthly_returns.csv", "monthly_returns.html", "trade_log.csv", "trade_log.html", "equity_curve.csv", "report.md")) {
+        if (-not (Test-Path -LiteralPath (Join-Path $reportDir $name))) {
+            return $false
+        }
+    }
+
+    return $true
+}
+
 function Get-MetricDouble {
     param(
         [Parameter(Mandatory = $false)]$Metrics,
@@ -1098,6 +1254,123 @@ function Get-MetricDouble {
     }
 }
 
+function Get-StableBandMaxTotalAbsReturnPct {
+    if ($MaxTotalAbsReturnPct -gt 0) {
+        return [double]$MaxTotalAbsReturnPct
+    }
+    if ($MaxTargetTotalReturnPct -gt 0) {
+        return [double]$MaxTargetTotalReturnPct
+    }
+    return [double]::PositiveInfinity
+}
+
+function Get-MonthlyReturnValuesPct {
+    param([Parameter(Mandatory = $false)]$Metrics)
+
+    $values = @()
+    if ($null -eq $Metrics) {
+        return $values
+    }
+
+    if ($Metrics.PSObject.Properties.Name -contains "monthly_returns") {
+        foreach ($row in @($Metrics.monthly_returns)) {
+            if ($null -ne $row -and ($row.PSObject.Properties.Name -contains "return_pct") -and $null -ne $row.return_pct) {
+                try {
+                    $values += [double]$row.return_pct
+                }
+                catch {
+                }
+            }
+        }
+    }
+
+    if (@($values).Count -eq 0 -and ($Metrics.PSObject.Properties.Name -contains "returns_by_month_pct")) {
+        $monthReturns = $Metrics.returns_by_month_pct
+        foreach ($property in @($monthReturns.PSObject.Properties)) {
+            if ($null -ne $property.Value) {
+                try {
+                    $values += [double]$property.Value
+                }
+                catch {
+                }
+            }
+        }
+    }
+
+    return $values
+}
+
+function Get-StableBandStats {
+    param([Parameter(Mandatory = $false)]$Metrics)
+
+    $values = @(Get-MonthlyReturnValuesPct -Metrics $Metrics)
+    $count = @($values).Count
+    if ($count -le 0) {
+        return [pscustomobject]@{
+            month_count = 0
+            positive_month_ratio = 0.0
+            negative_month_ratio = 0.0
+            flat_month_ratio = 0.0
+            dominant_month_ratio = 0.0
+        }
+    }
+
+    $positive = @($values | Where-Object { $_ -gt 0.0 }).Count
+    $negative = @($values | Where-Object { $_ -lt 0.0 }).Count
+    $flat = @($values | Where-Object { $_ -eq 0.0 }).Count
+    $positiveRatio = [double]$positive / [double]$count
+    $negativeRatio = [double]$negative / [double]$count
+    return [pscustomobject]@{
+        month_count = $count
+        positive_month_ratio = $positiveRatio
+        negative_month_ratio = $negativeRatio
+        flat_month_ratio = ([double]$flat / [double]$count)
+        dominant_month_ratio = [math]::Max($positiveRatio, $negativeRatio)
+    }
+}
+
+function Get-StableBandDirection {
+    param([Parameter(Mandatory = $false)]$Metrics)
+
+    $totalReturn = Get-MetricDouble -Metrics $Metrics -Name "total_return_pct"
+    if ($null -eq $totalReturn -or $totalReturn -eq 0.0) {
+        return ""
+    }
+    if ($totalReturn -gt 0.0) {
+        return "positive"
+    }
+    return "negative"
+}
+
+function Test-StableBandReturnRange {
+    param([Parameter(Mandatory = $false)]$Metrics)
+
+    $totalReturn = Get-MetricDouble -Metrics $Metrics -Name "total_return_pct"
+    if ($null -eq $totalReturn -or $totalReturn -eq 0.0) {
+        return $false
+    }
+    $minAbs = [math]::Abs($TargetTotalAbsReturnPct)
+    $maxAbs = Get-StableBandMaxTotalAbsReturnPct
+    if ($totalReturn -gt 0.0) {
+        return ($totalReturn -ge $minAbs -and $totalReturn -le $maxAbs)
+    }
+    return ($totalReturn -le (-1.0 * $minAbs) -and $totalReturn -ge (-1.0 * $maxAbs))
+}
+
+function Get-StableBandDirectionMonthRatio {
+    param([Parameter(Mandatory = $false)]$Metrics)
+
+    $direction = Get-StableBandDirection -Metrics $Metrics
+    $stats = Get-StableBandStats -Metrics $Metrics
+    if ($direction -eq "positive") {
+        return [double]$stats.positive_month_ratio
+    }
+    if ($direction -eq "negative") {
+        return [double]$stats.negative_month_ratio
+    }
+    return 0.0
+}
+
 function Test-BacktestSuccess {
     param([Parameter(Mandatory = $false)]$Metrics)
 
@@ -1107,31 +1380,6 @@ function Test-BacktestSuccess {
 
     $monthlyMetric = Get-MonthlyReturnMetricPct -Metrics $Metrics
     if ($null -eq $monthlyMetric) {
-        return $false
-    }
-
-    $totalReturn = Get-MetricDouble -Metrics $Metrics -Name "total_return_pct"
-    if ($null -eq $totalReturn -or $totalReturn -le $MinTotalReturnPct) {
-        return $false
-    }
-
-    $profitFactor = Get-MetricDouble -Metrics $Metrics -Name "profit_factor"
-    if ($null -eq $profitFactor -or $profitFactor -lt $MinProfitFactor) {
-        return $false
-    }
-
-    $maxDrawdown = Get-MetricDouble -Metrics $Metrics -Name "max_drawdown_pct"
-    if ($null -eq $maxDrawdown -or $maxDrawdown -lt (-1.0 * [math]::Abs($MaxDrawdownPct))) {
-        return $false
-    }
-
-    $positiveMonthRatio = Get-MetricDouble -Metrics $Metrics -Name "positive_active_month_ratio"
-    if ($null -eq $positiveMonthRatio -or $positiveMonthRatio -lt $MinPositiveMonthRatio) {
-        return $false
-    }
-
-    $minMonthlyReturn = Get-MetricDouble -Metrics $Metrics -Name "min_monthly_return_pct"
-    if ($null -eq $minMonthlyReturn -or $minMonthlyReturn -lt $MinMonthlyReturnFloorPct) {
         return $false
     }
 
@@ -1148,13 +1396,60 @@ function Test-BacktestSuccess {
     if ($MinTrades -gt 0) {
         $tradesOk = ($null -ne $Metrics.total_trades -and $Metrics.total_trades -ge $MinTrades)
     }
+    if (-not $tradesOk) {
+        return $false
+    }
 
     $realDataOk = $true
     if ($Metrics.PSObject.Properties.Name -contains "data_is_synthetic") {
         $realDataOk = ($Metrics.data_is_synthetic -ne $true)
     }
+    if (-not $realDataOk) {
+        return $false
+    }
 
-    return ($monthlyMetric -ge (Get-CurrentReturnTargetPct) -and $tradesOk -and $realDataOk)
+    $maxDrawdown = Get-MetricDouble -Metrics $Metrics -Name "max_drawdown_pct"
+    if ($null -eq $maxDrawdown -or $maxDrawdown -lt (-1.0 * [math]::Abs($MaxDrawdownPct))) {
+        return $false
+    }
+
+    if ($TrainingObjective -eq "stable-band") {
+        $direction = Get-StableBandDirection -Metrics $Metrics
+        if ([string]::IsNullOrWhiteSpace($direction)) {
+            return $false
+        }
+        if (-not (Test-StableBandReturnRange -Metrics $Metrics)) {
+            return $false
+        }
+        $stats = Get-StableBandStats -Metrics $Metrics
+        $directionMonthRatio = Get-StableBandDirectionMonthRatio -Metrics $Metrics
+        if ([int]$stats.month_count -le 0 -or $directionMonthRatio -lt $MinStableMonthRatio) {
+            return $false
+        }
+        return $true
+    }
+
+    $totalReturn = Get-MetricDouble -Metrics $Metrics -Name "total_return_pct"
+    if ($null -eq $totalReturn -or $totalReturn -le $MinTotalReturnPct) {
+        return $false
+    }
+
+    $profitFactor = Get-MetricDouble -Metrics $Metrics -Name "profit_factor"
+    if ($null -eq $profitFactor -or $profitFactor -lt $MinProfitFactor) {
+        return $false
+    }
+
+    $positiveMonthRatio = Get-MetricDouble -Metrics $Metrics -Name "positive_active_month_ratio"
+    if ($null -eq $positiveMonthRatio -or $positiveMonthRatio -lt $MinPositiveMonthRatio) {
+        return $false
+    }
+
+    $minMonthlyReturn = Get-MetricDouble -Metrics $Metrics -Name "min_monthly_return_pct"
+    if ($null -eq $minMonthlyReturn -or $minMonthlyReturn -lt $MinMonthlyReturnFloorPct) {
+        return $false
+    }
+
+    return ($monthlyMetric -ge (Get-CurrentReturnTargetPct))
 }
 
 function Get-MonthlyReturnMetricPct {
@@ -1209,7 +1504,14 @@ function Complete-CurrentReturnTarget {
     $currentTarget = Get-CurrentReturnTargetPct
     $milestone = [pscustomobject]@{
         time = (Get-Date).ToString("o")
+        training_objective = $TrainingObjective
         achieved_target_monthly_return_pct = $currentTarget
+        target_total_abs_return_pct = $TargetTotalAbsReturnPct
+        max_total_abs_return_pct = Get-StableBandMaxTotalAbsReturnPct
+        min_stable_month_ratio = $MinStableMonthRatio
+        stable_band_direction = Get-StableBandDirection -Metrics $Metrics
+        direction_month_ratio = Get-StableBandDirectionMonthRatio -Metrics $Metrics
+        stable_band_stats = Get-StableBandStats -Metrics $Metrics
         monthly_return_target_mode = $MonthlyReturnTargetMode
         achieved_monthly_return_metric_pct = Get-MonthlyReturnMetricPct -Metrics $Metrics
         regression_cycles = $State.regression_cycles
@@ -1218,6 +1520,12 @@ function Complete-CurrentReturnTarget {
         metrics = $Metrics
     }
     $State.target_milestones = @($State.target_milestones) + @($milestone)
+
+    if ($TrainingObjective -eq "stable-band") {
+        $State.success = $true
+        $State.status = "stable_band_target_reached"
+        return $false
+    }
 
     if ($StopWhenStableTargetReached) {
         $State.success = $true
@@ -1301,7 +1609,25 @@ function Update-RegressionState {
 
     $State.regression_cycles = [int]$State.regression_cycles + 1
     $isSuccess = Test-BacktestSuccess -Metrics $Metrics
-    if ($isSuccess) {
+    $stableBandDirection = Get-StableBandDirection -Metrics $Metrics
+    if ($TrainingObjective -eq "stable-band") {
+        if ($isSuccess) {
+            if ([string]::IsNullOrWhiteSpace($State.stable_band_direction) -or $State.stable_band_direction -eq $stableBandDirection) {
+                $State.successful_cycles = [int]$State.successful_cycles + 1
+                $State.consecutive_successes = [int]$State.consecutive_successes + 1
+            }
+            else {
+                $State.successful_cycles = 1
+                $State.consecutive_successes = 1
+            }
+            $State.stable_band_direction = $stableBandDirection
+        }
+        else {
+            $State.consecutive_successes = 0
+            $State.stable_band_direction = $null
+        }
+    }
+    elseif ($isSuccess) {
         $State.successful_cycles = [int]$State.successful_cycles + 1
         $State.consecutive_successes = [int]$State.consecutive_successes + 1
     }
@@ -1322,7 +1648,15 @@ function Update-RegressionState {
         regression_cycles = $State.regression_cycles
         successful_cycles = $State.successful_cycles
         consecutive_successes = $State.consecutive_successes
+        training_objective = $TrainingObjective
         current_target_total_return_pct = Get-CurrentReturnTargetPct
+        target_total_abs_return_pct = $TargetTotalAbsReturnPct
+        max_total_abs_return_pct = Get-StableBandMaxTotalAbsReturnPct
+        min_stable_month_ratio = $MinStableMonthRatio
+        stable_band_direction = $stableBandDirection
+        stable_band_streak_direction = $State.stable_band_direction
+        direction_month_ratio = Get-StableBandDirectionMonthRatio -Metrics $Metrics
+        stable_band_stats = Get-StableBandStats -Metrics $Metrics
         success = $isSuccess
         data_signature = $signature
         metrics = $Metrics
@@ -1442,11 +1776,12 @@ Preferred commands:
 7. python -m src.main build-labels
 8. python -m src.main walk-forward --model random_forest
 9. python -m src.main backtest --model latest
-10. python -m src.main batch-search --candidates 24 --target-monthly-return-pct $(Get-CurrentReturnTargetPct) --min-trades $MinTrades --min-profit-factor $MinProfitFactor --max-drawdown-pct $MaxDrawdownPct --min-positive-month-ratio $MinPositiveMonthRatio --min-monthly-return-floor-pct $MinMonthlyReturnFloorPct --min-walk-forward-windows $MinWalkForwardWindows
+10. python -m src.main batch-search --config-overrides $BatchConfigOverrides --skip-pipeline --candidates 48 --objective stable-band --risk-profile $BatchRiskProfile --target-total-abs-return-pct $TargetTotalAbsReturnPct --max-total-abs-return-pct $MaxTotalAbsReturnPct --max-drawdown-pct $MaxDrawdownPct --min-stable-month-ratio $MinStableMonthRatio --min-trades $MinTrades --min-walk-forward-windows $MinWalkForwardWindows
 11. python -m src.main report --type backtest
 
 Use market_data_collector J-Quants parquet data when available. If minute data is missing, run the collector download commands or ask the data-expander path to do it; do not use synthetic data to satisfy profitability milestones. Keep outputs under data/reports/backtest.
 Use batch-search for local candidate sweeps. It reuses real walk-forward predictions and runs many backtest-only parameter candidates under data/reports/experiments so the AI does not spend tokens supervising each candidate one by one.
+If batch-search is interrupted after the fresh backtest artifacts exist, do not fabricate a pass or retry indefinitely inside the same subagent; report the latest partial batch-search summary and the backtest metrics.
 
 Required output artifacts:
 - metrics JSON containing total_return_pct and total_trades
@@ -1456,6 +1791,7 @@ Required output artifacts:
 - equity curve CSV
 - markdown report
 - metrics JSON must include data_is_synthetic=false for target success.
+- The target is stable-band: total_return_pct must fit one signed band (+5%..+20% or -20%..-5% by default), monthly returns must mostly match that direction, and consecutive successes must not switch direction.
 
 Do not tune just to make a fake number. Keep the simulation accounting coherent and costs/slippage enabled.
 "@
@@ -1536,7 +1872,7 @@ Latest supervisor-readable metrics:
 $metricsText
 
 Task:
-1. Treat any very large positive return as suspicious until proven otherwise.
+1. Treat any very large absolute return as suspicious until proven otherwise.
 2. Audit the latest run for future leakage, synthetic-data dependence, unrealistic execution, stale report reuse, training/test contamination, and costs/slippage being disabled.
 2a. Confirm metrics.json has data_is_synthetic=false and data_providers does not contain synthetic providers before counting success.
 3. Verify monthly_returns.csv and monthly_returns.html exist and include every month with return_pct whether positive or negative.
@@ -1572,8 +1908,8 @@ $metricsText
 
 Task:
 1. Inspect the latest data/reports/backtest outputs, trade_log.csv, signal logs, and tests.
-2. First run a local batch sweep before spending effort on code changes:
-   python -m src.main batch-search --candidates 48 --target-monthly-return-pct $(Get-CurrentReturnTargetPct) --min-trades $MinTrades --min-profit-factor $MinProfitFactor --max-drawdown-pct $MaxDrawdownPct --min-positive-month-ratio $MinPositiveMonthRatio --min-monthly-return-floor-pct $MinMonthlyReturnFloorPct --min-walk-forward-windows $MinWalkForwardWindows
+2. First run a local stable-band batch sweep before spending effort on code changes:
+   & `$env:QUANT_PYTHON_EXE -m src.main batch-search --config-overrides $BatchConfigOverrides --candidates 48 --objective stable-band --risk-profile $BatchRiskProfile --target-total-abs-return-pct $TargetTotalAbsReturnPct --max-total-abs-return-pct $MaxTotalAbsReturnPct --max-drawdown-pct $MaxDrawdownPct --min-stable-month-ratio $MinStableMonthRatio --min-trades $MinTrades --min-walk-forward-windows $MinWalkForwardWindows
    Inspect the newest data/reports/experiments/batch_search_*/ranking.csv and summary.json. If a candidate is materially better, explain which parameters improved the result and whether it passed all gates.
 3. Write a concise loss/weakness review under data/reports/agent_reviews/iteration_$CycleNumber.md. Include reasons for negative trades grouped by signal/action, ETF, market regime, time of day, and execution/risk issue when those fields are available.
 4. Make one bounded improvement to the strategy/model/backtest implementation or candidate config only after reading the batch ranking. Examples: confidence threshold, risk sizing, stop/take-profit behavior, feature bug, label threshold, execution-cost realism, leakage prevention, regime filter.
@@ -1583,7 +1919,7 @@ Task:
 
 Rules:
 - Do not use future data in features.
-- Do not disable costs/slippage just to make returns positive.
+- Do not disable costs/slippage just to make returns fit the target band.
 - Do not overfit by repeatedly hard-coding dates or symbols.
 - Keep live trading disabled.
 - No guarantee language.
@@ -1608,7 +1944,7 @@ Inspect the current project and latest reports. Produce or update a short summar
 - latest monthly return table location and target mode
 - where trade logs and reasons are stored
 - remaining risks/gaps
-- whether the result is positive in this backtest, without implying future profit
+- whether the result fits the stable-band target, without implying future performance
 
 Latest supervisor-readable metrics:
 $metricsText
@@ -1626,7 +1962,8 @@ if (-not [System.IO.Path]::IsPathRooted($script:SpecFile)) {
 }
 $script:SpecFile = [System.IO.Path]::GetFullPath($script:SpecFile)
 if (-not (Test-Path -LiteralPath $script:SpecFile)) {
-    throw "Spec file does not exist: $script:SpecFile"
+    Write-AgentMessage "WARNING: Spec file does not exist: $script:SpecFile. Continuing with README and repo-local docs as source of truth."
+    $script:SpecFile = "missing; use README.md and repo-local docs as source of truth"
 }
 
 $script:PythonExe = Resolve-PythonExe
@@ -1674,6 +2011,12 @@ $serviceTierForDisplay = if ([string]::IsNullOrWhiteSpace($ServiceTier)) { "defa
     target_total_return_pct = $TargetTotalReturnPct
     target_return_increment_pct = $TargetReturnIncrementPct
     max_target_total_return_pct = $MaxTargetTotalReturnPct
+    training_objective = $TrainingObjective
+    target_total_abs_return_pct = $TargetTotalAbsReturnPct
+    max_total_abs_return_pct = $MaxTotalAbsReturnPct
+    min_stable_month_ratio = $MinStableMonthRatio
+    batch_risk_profile = $BatchRiskProfile
+    batch_config_overrides = $BatchConfigOverrides
     monthly_return_target_mode = $MonthlyReturnTargetMode
     min_trades = $MinTrades
     min_total_return_pct = $MinTotalReturnPct
@@ -1713,10 +2056,10 @@ Write-AgentMessage "Workspace: $script:WorkspaceRoot"
 Write-AgentMessage "Spec: $script:SpecFile"
 Write-AgentMessage "Model: $Model, reasoning effort: $ReasoningEffort, service tier: $serviceTierForDisplay"
 Write-AgentMessage "Python: $script:PythonExe"
-Write-AgentMessage "Goal: stable fresh regressions with dynamic monthly return target starting at $TargetTotalReturnPct%, incrementing by $TargetReturnIncrementPct percentage points"
-Write-AgentMessage "MonthlyReturnTargetMode: $MonthlyReturnTargetMode"
-Write-AgentMessage "Risk/quality gates: MinTrades=$MinTrades, MinTotalReturnPct>$MinTotalReturnPct, MinProfitFactor=$MinProfitFactor, MaxDrawdownPct=$MaxDrawdownPct, MinPositiveActiveMonthRatio=$MinPositiveMonthRatio, MinMonthlyReturnFloorPct=$MinMonthlyReturnFloorPct, MinWalkForwardWindows=$MinWalkForwardWindows"
-Write-AgentMessage "Current target stop cap: MaxTargetTotalReturnPct=$MaxTargetTotalReturnPct (0 means no cap), StopWhenStableTargetReached=$StopWhenStableTargetReached"
+Write-AgentMessage "Goal: TrainingObjective=$TrainingObjective, stable-band signed total_return_pct target=+$TargetTotalAbsReturnPct%..+$MaxTotalAbsReturnPct% or -$MaxTotalAbsReturnPct%..-$TargetTotalAbsReturnPct%, direction_month_ratio>=$MinStableMonthRatio"
+Write-AgentMessage "MonthlyReturnTargetMode: $MonthlyReturnTargetMode (legacy profit objective only)"
+Write-AgentMessage "Risk/quality gates: MinTrades=$MinTrades, MaxDrawdownPct=$MaxDrawdownPct, MinWalkForwardWindows=$MinWalkForwardWindows, BatchRiskProfile=$BatchRiskProfile, BatchConfigOverrides=$BatchConfigOverrides"
+Write-AgentMessage "Legacy profit target stop cap: MaxTargetTotalReturnPct=$MaxTargetTotalReturnPct (0 means no cap), StopWhenStableTargetReached=$StopWhenStableTargetReached"
 Write-AgentMessage "Stable target requires: MinRegressionCycles=$MinRegressionCycles, RequiredConsecutiveSuccesses=$RequiredConsecutiveSuccesses, MinRuntimeHours=$MinRuntimeHours"
 Write-AgentMessage "Data expansion: every $DataExpansionEveryCycles cycles, stale after $DataStaleCyclesBeforeExpansion repeated data signatures, MaxDataExpansionRuns=$MaxDataExpansionRuns (0 unlimited)"
 Write-AgentMessage "MaxCycles: $MaxCycles (0 means unlimited until the goal is reached)"
@@ -1738,10 +2081,16 @@ $state = $script:State
 $state.status = "running"
 $state.stop_file = $script:StopFilePath
 $state.target = [pscustomobject]@{
+    training_objective = $TrainingObjective
     initial_total_return_pct_gt = $TargetTotalReturnPct
     current_total_return_pct_gt = Get-CurrentReturnTargetPct
     increment_pct = $TargetReturnIncrementPct
     max_total_return_pct = $MaxTargetTotalReturnPct
+    target_total_abs_return_pct = $TargetTotalAbsReturnPct
+    max_total_abs_return_pct = Get-StableBandMaxTotalAbsReturnPct
+    min_stable_month_ratio = $MinStableMonthRatio
+    batch_risk_profile = $BatchRiskProfile
+    batch_config_overrides = $BatchConfigOverrides
     monthly_return_target_mode = $MonthlyReturnTargetMode
     min_trades = $MinTrades
     min_total_return_pct = $MinTotalReturnPct
@@ -1877,15 +2226,52 @@ try {
         $cycleStartedAt = Get-Date
         $runnerResult = Invoke-CodexAgent -Role "backtest-runner-cycle-$($state.cycle)" -PromptBody (Get-BacktestRunnerPrompt -CycleNumber $state.cycle)
         Add-StateHistory -State $state -Event "backtest-runner" -Data $runnerResult
-        if (Repair-IfSubagentFailed -Context "backtest runner failed in cycle $($state.cycle)" -Result $runnerResult) {
-            if ($SleepSeconds -gt 0) {
-                Write-AgentMessage "Sleeping $SleepSeconds seconds after repair before next cycle."
-                Start-Sleep -Seconds $SleepSeconds
-            }
-            continue
-        }
 
         $metrics = Get-LatestBacktestMetrics -NotBefore $cycleStartedAt.AddSeconds(-2)
+        $batchSummary = Get-LatestBatchSearchSummary -NotBefore $cycleStartedAt.AddSeconds(-2)
+        $backtestArtifactsReady = Test-BacktestArtifactsReady -Metrics $metrics
+        if ([int]$runnerResult.exit_code -ne 0) {
+            if ($null -ne $metrics -and ($null -ne $batchSummary -or $backtestArtifactsReady)) {
+                $batchSummaryFile = ""
+                $bestCandidateId = ""
+                $passingCandidateCount = ""
+                $batchCompleted = ""
+                $completedCandidateCount = ""
+                $requestedCandidateCount = ""
+                if ($null -ne $batchSummary) {
+                    $batchSummaryFile = $batchSummary.file
+                    $bestCandidateId = $batchSummary.best_candidate_id
+                    $passingCandidateCount = $batchSummary.passing_candidate_count
+                    $batchCompleted = $batchSummary.completed
+                    $completedCandidateCount = $batchSummary.completed_candidate_count
+                    $requestedCandidateCount = $batchSummary.requested_candidate_count
+                }
+                Write-AgentMessage ("Backtest runner exited with code {0}, but fresh backtest metrics/artifacts were produced; consuming artifacts and continuing. metrics={1}; artifacts_ready={2}; batch_summary={3}; batch_completed={4}; candidates={5}/{6}; best_candidate={7}; passing_candidates={8}" -f $runnerResult.exit_code, $metrics.file, $backtestArtifactsReady, $batchSummaryFile, $batchCompleted, $completedCandidateCount, $requestedCandidateCount, $bestCandidateId, $passingCandidateCount)
+                Add-StateHistory -State $state -Event "backtest-runner-artifact-salvaged" -Data ([pscustomobject]@{
+                    role = $runnerResult.role
+                    exit_code = $runnerResult.exit_code
+                    metrics_file = $metrics.file
+                    backtest_artifacts_ready = $backtestArtifactsReady
+                    batch_summary_file = $batchSummaryFile
+                    batch_completed = $batchCompleted
+                    completed_candidate_count = $completedCandidateCount
+                    requested_candidate_count = $requestedCandidateCount
+                    best_candidate_id = $bestCandidateId
+                    passing_candidate_count = $passingCandidateCount
+                })
+                Clear-SupervisorFailures -Reason "fresh backtest artifacts produced despite runner exit"
+            }
+            else {
+                if (Repair-IfSubagentFailed -Context "backtest runner failed in cycle $($state.cycle)" -Result $runnerResult -Metrics $metrics) {
+                    if ($SleepSeconds -gt 0) {
+                        Write-AgentMessage "Sleeping $SleepSeconds seconds after repair before next cycle."
+                        Start-Sleep -Seconds $SleepSeconds
+                    }
+                    continue
+                }
+            }
+        }
+
         $state.last_metrics = $metrics
         Save-State -State $state -Path $statePath
 
@@ -1911,18 +2297,18 @@ try {
 
         $cycleSuccess = Update-RegressionState -State $state -Metrics $metrics
         Save-State -State $state -Path $statePath
-        Write-AgentMessage ("Regression progress: target_monthly_{0}_return_pct>={1}, cycles={2}/{3}, successful_at_current_target={4}, consecutive_successes={5}/{6}, current_success={7}" -f $MonthlyReturnTargetMode, (Get-CurrentReturnTargetPct), $state.regression_cycles, $MinRegressionCycles, $state.successful_cycles, $state.consecutive_successes, $RequiredConsecutiveSuccesses, $cycleSuccess)
+        Write-AgentMessage ("Regression progress: objective={0}, abs_total_return_band={1}..{2}, min_stable_month_ratio={3}, cycles={4}/{5}, successful_at_current_target={6}, consecutive_successes={7}/{8}, current_success={9}" -f $TrainingObjective, $TargetTotalAbsReturnPct, $MaxTotalAbsReturnPct, $MinStableMonthRatio, $state.regression_cycles, $MinRegressionCycles, $state.successful_cycles, $state.consecutive_successes, $RequiredConsecutiveSuccesses, $cycleSuccess)
         Invoke-TrainingCycleReport
 
         if (Test-StableTargetReached -State $state) {
             $achievedTarget = Get-CurrentReturnTargetPct
-            Write-AgentMessage "Stable monthly return target $achievedTarget% reached after $($state.regression_cycles) fresh regression cycles and $($state.consecutive_successes) consecutive successful cycles."
+            Write-AgentMessage "Stable-band target reached after $($state.regression_cycles) fresh regression cycles and $($state.consecutive_successes) consecutive successful cycles."
             Clear-SupervisorFailures -Reason "stable target reached"
             $shouldContinue = Complete-CurrentReturnTarget -State $state -Metrics $metrics
             $state.target.current_total_return_pct_gt = Get-CurrentReturnTargetPct
             Save-State -State $state -Path $statePath
             if ($shouldContinue) {
-                Write-AgentMessage "Increasing return target to $(Get-CurrentReturnTargetPct)% and continuing long-run regressions."
+                Write-AgentMessage "Increasing legacy return target to $(Get-CurrentReturnTargetPct)% and continuing long-run regressions."
             }
             else {
                 Write-AgentMessage "Stopping after stable target because stop/cap option was reached."

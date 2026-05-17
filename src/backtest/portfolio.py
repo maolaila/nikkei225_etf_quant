@@ -22,6 +22,7 @@ class Position:
     absolute_max_equity_pct: float = 0.0
     max_holding_minutes: int = 60
     stop_loss_pct: float = 1.0
+    take_profit_pct: float = 0.0
     market_regime: str = "unknown"
 
     def market_value(self, price: float) -> float:

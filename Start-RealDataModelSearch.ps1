@@ -33,17 +33,26 @@ param(
     [int]$StalledSubagentMinutes = 30,
     [int]$MinRegressionCycles = 100,
     [int]$RequiredConsecutiveSuccesses = 10,
-    [double]$TargetTotalReturnPct = 3.0,
+    [double]$TargetTotalReturnPct = 5.0,
     [double]$TargetReturnIncrementPct = 2.0,
+    [ValidateSet("profit", "stable-band")]
+    [string]$TrainingObjective = "stable-band",
+    [double]$TargetTotalAbsReturnPct = 5.0,
+    [double]$MaxTotalAbsReturnPct = 20.0,
+    [double]$MinStableMonthRatio = 0.60,
+    [ValidateSet("default", "aggressive")]
+    [string]$BatchRiskProfile = "aggressive",
+    [string]$BatchConfigOverrides = "config/experiments/aggressive_stable_loss.yaml",
     [int]$MinTrades = 50,
     [double]$MinTotalReturnPct = 0.0,
     [double]$MinProfitFactor = 1.2,
-    [double]$MaxDrawdownPct = 15.0,
+    [double]$MaxDrawdownPct = 20.0,
     [double]$MinPositiveMonthRatio = 0.55,
     [double]$MinMonthlyReturnFloorPct = -8.0,
     [int]$MinWalkForwardWindows = 6,
     [int]$DataExpansionEveryCycles = 25,
-    [int]$DataStaleCyclesBeforeExpansion = 25
+    [int]$DataStaleCyclesBeforeExpansion = 25,
+    [switch]$AllowAutonomousConfigApply
 )
 
 Set-StrictMode -Version Latest
@@ -186,6 +195,12 @@ if ($StartCodexSupervisor) {
         RequiredConsecutiveSuccesses = $RequiredConsecutiveSuccesses
         TargetTotalReturnPct = $TargetTotalReturnPct
         TargetReturnIncrementPct = $TargetReturnIncrementPct
+        TrainingObjective = $TrainingObjective
+        TargetTotalAbsReturnPct = $TargetTotalAbsReturnPct
+        MaxTotalAbsReturnPct = $MaxTotalAbsReturnPct
+        MinStableMonthRatio = $MinStableMonthRatio
+        BatchRiskProfile = $BatchRiskProfile
+        BatchConfigOverrides = $BatchConfigOverrides
         MinTrades = $MinTrades
         MinTotalReturnPct = $MinTotalReturnPct
         MinProfitFactor = $MinProfitFactor
@@ -203,6 +218,9 @@ if ($StartCodexSupervisor) {
     }
     if ($DangerouslyBypassApprovalsAndSandbox) {
         $supervisorArgs["DangerouslyBypassApprovalsAndSandbox"] = $true
+    }
+    if ($AllowAutonomousConfigApply) {
+        $supervisorArgs["AllowAutonomousConfigApply"] = $true
     }
     Write-Step "Starting Codex supervisor"
     & $Supervisor @supervisorArgs
