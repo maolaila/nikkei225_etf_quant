@@ -10,8 +10,8 @@ model:
     max_depth: 8
     min_samples_leaf: 20
   prediction:
-    min_confidence: 0.30
-    min_action_probability: 0.20
+    min_confidence: 0.35
+    min_action_probability: 0.10
   features:
     exclude_future_columns: true
     drop_na: true
