@@ -82,6 +82,15 @@ backtest:
     range_multiplier: 1.25
     unknown_regime_multiplier: 1.20
     leveraged_etf_multiplier: 1.20
+    adjustments:
+      - name: "iteration_5_low_conf_morning_trend_2x_stepdown"
+        enabled: true
+        actions: ["long_2x", "short_2x"]
+        sessions: ["morning"]
+        market_regimes: ["trend"]
+        max_confidence: 0.45
+        max_action_probability: 0.45
+        multiplier: 0.40
   report:
     output_dir: "data/reports/backtest"
     save_trades_csv: true
