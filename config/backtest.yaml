@@ -9,7 +9,7 @@ backtest:
     use_bid_ask_prices: false
     use_mid_price: false
     require_bid_ask: false
-    slippage_bps: 3
+    slippage_bps: 5
     fallback_spread_bps: 8
     sensitivity:
       latency_bars: [0, 1, 2, 5]
@@ -32,8 +32,8 @@ backtest:
     system_fee_jpy: 0
   risk:
     max_risk_per_trade_pct: 0.50
-    max_daily_loss_pct: 2.0
-    max_trades_per_day: 4
+    max_daily_loss_pct: 10.0
+    max_trades_per_day: 12
     max_consecutive_losses: 20
     max_spread_bps: 0
     max_quote_age_seconds: 0
@@ -60,28 +60,28 @@ backtest:
       enabled: false
   position_limits:
     long_1x:
-      max_equity_pct: 25
+      max_equity_pct: 75
       absolute_max_equity_pct: 80
     long_2x:
-      max_equity_pct: 75
-      absolute_max_equity_pct: 45
+      max_equity_pct: 25
+      absolute_max_equity_pct: 60
     short_1x:
-      max_equity_pct: 20
-      absolute_max_equity_pct: 100
+      max_equity_pct: 50
+      absolute_max_equity_pct: 60
     short_2x:
       max_equity_pct: 80
-      absolute_max_equity_pct: 45
+      absolute_max_equity_pct: 100
   position_sizing:
     dynamic_enabled: true
     confidence_floor: 0.10
     confidence_full: 0.70
-    min_multiplier: 0.50
+    min_multiplier: 1.10
     max_multiplier: 1.25
     min_equity_pct: 10
-    trend_multiplier: 1.00
-    range_multiplier: 1.25
-    unknown_regime_multiplier: 1.20
-    leveraged_etf_multiplier: 1.00
+    trend_multiplier: 1.20
+    range_multiplier: 0.90
+    unknown_regime_multiplier: 1.00
+    leveraged_etf_multiplier: 1.40
     adjustments:
       - name: "iteration_5_low_conf_morning_trend_2x_stepdown"
         enabled: true

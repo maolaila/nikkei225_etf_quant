@@ -3,7 +3,7 @@
 model:
   prediction:
     min_confidence: 0.30
-    min_action_probability: 0.20
+    min_action_probability: 0.35
 
 strategy:
   entry_filters:
@@ -16,25 +16,25 @@ strategy:
       sessions: ["morning"]
       market_regimes: ["trend"]
   exit:
-    max_holding_minutes: 180
-    exit_on_opposite_signal: false
+    max_holding_minutes: 45
+    exit_on_opposite_signal: true
     exit_on_neutral_signal: false
     stop_loss_pct:
       long_1x: 0.8
       long_2x: 2.2
-      short_1x: 0.5
-      short_2x: 0.8
+      short_1x: 1.8
+      short_2x: 1.5
     dynamic_holding:
-      confidence_extend_multiplier: 1.8
+      confidence_extend_multiplier: 1.5
       low_confidence_multiplier: 1.0
       trend_multiplier: 1.5
       range_multiplier: 1.2
       unknown_regime_multiplier: 1.1
       leveraged_etf_multiplier: 1.1
-      max_minutes: 240
+      max_minutes: 180
     dynamic_stop_loss:
-      high_confidence_widen_multiplier: 2.2
-      low_confidence_tighten_multiplier: 1.0
+      high_confidence_widen_multiplier: 1.2
+      low_confidence_tighten_multiplier: 0.9
       trend_widen_multiplier: 1.5
       range_tighten_multiplier: 1.1
       min_pct:
@@ -50,32 +50,32 @@ strategy:
 
 backtest:
   risk:
-    max_daily_loss_pct: 2.0
-    max_trades_per_day: 4
+    max_daily_loss_pct: 10.0
+    max_trades_per_day: 12
     max_consecutive_losses: 20
     max_implied_dispersion_bps: 150
     realized_loss_gate:
       enabled: false
   position_limits:
     long_1x:
-      max_equity_pct: 25
+      max_equity_pct: 75
       absolute_max_equity_pct: 80
     long_2x:
-      max_equity_pct: 75
-      absolute_max_equity_pct: 45
+      max_equity_pct: 25
+      absolute_max_equity_pct: 60
     short_1x:
-      max_equity_pct: 20
-      absolute_max_equity_pct: 100
+      max_equity_pct: 50
+      absolute_max_equity_pct: 60
     short_2x:
       max_equity_pct: 80
-      absolute_max_equity_pct: 45
+      absolute_max_equity_pct: 100
   position_sizing:
     confidence_floor: 0.10
     confidence_full: 0.70
-    min_multiplier: 0.50
+    min_multiplier: 1.10
     max_multiplier: 1.25
     min_equity_pct: 10
-    trend_multiplier: 1.00
-    range_multiplier: 1.25
-    unknown_regime_multiplier: 1.20
-    leveraged_etf_multiplier: 1.00
+    trend_multiplier: 1.20
+    range_multiplier: 0.90
+    unknown_regime_multiplier: 1.00
+    leveraged_etf_multiplier: 1.40

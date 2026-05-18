@@ -105,6 +105,7 @@ SUMMARY_COLUMNS = [
     "positive_active_month_ratio",
     "win_rate_pct",
     "data_is_synthetic",
+    "data_providers",
     "walk_forward_windows",
     "walk_forward_fallback_used",
     "report_dir",
@@ -226,6 +227,7 @@ def run_batch_search(
                 "positive_active_month_ratio": None,
                 "win_rate_pct": None,
                 "data_is_synthetic": None,
+                "data_providers": None,
                 "walk_forward_windows": None,
                 "walk_forward_fallback_used": None,
                 "report_dir": str(candidate_dir),
@@ -278,7 +280,7 @@ def candidate_passes_target(
     min_walk_forward_windows: int,
 ) -> bool:
     return (
-        not bool(metrics.get("data_is_synthetic", True))
+        metrics_have_real_non_synthetic_provider(metrics)
         and int(metrics.get("walk_forward_windows", 0) or 0) >= min_walk_forward_windows
         and not bool(metrics.get("walk_forward_fallback_used", True))
         and int(metrics.get("total_trades", 0) or 0) >= min_trades
@@ -308,7 +310,7 @@ def candidate_passes_stable_loss_target(
     total_loss = _loss_pct(metrics.get("total_return_pct", 0.0))
     drawdown_loss = _loss_pct(metrics.get("max_drawdown_pct", 0.0))
     return (
-        not bool(metrics.get("data_is_synthetic", True))
+        metrics_have_real_non_synthetic_provider(metrics)
         and int(metrics.get("walk_forward_windows", 0) or 0) >= min_walk_forward_windows
         and not bool(metrics.get("walk_forward_fallback_used", True))
         and int(metrics.get("total_trades", 0) or 0) >= min_trades
@@ -338,7 +340,7 @@ def candidate_passes_stable_band_target(
     direction = stable_band_direction(metrics)
     direction_ratio = stable_band_direction_month_ratio(metrics)
     return (
-        not bool(metrics.get("data_is_synthetic", True))
+        metrics_have_real_non_synthetic_provider(metrics)
         and int(metrics.get("walk_forward_windows", 0) or 0) >= min_walk_forward_windows
         and not bool(metrics.get("walk_forward_fallback_used", True))
         and int(metrics.get("total_trades", 0) or 0) >= min_trades
@@ -383,7 +385,7 @@ def score_candidate(
         + drawdown * 2.0
         + min(trades, min_trades * 2) / max(min_trades, 1) * 10.0
     )
-    if bool(metrics.get("data_is_synthetic", True)):
+    if not metrics_have_real_non_synthetic_provider(metrics):
         score -= 500.0
     if bool(metrics.get("walk_forward_fallback_used", True)):
         score -= 250.0
@@ -445,7 +447,7 @@ def score_stable_loss_candidate(
         - float(stats["monthly_return_std_pct"]) * 12.0
         + min(trades, max(min_trades * 2, 1)) / max(min_trades, 1) * 15.0
     )
-    if bool(metrics.get("data_is_synthetic", True)):
+    if not metrics_have_real_non_synthetic_provider(metrics):
         score -= 500.0
     if bool(metrics.get("walk_forward_fallback_used", True)):
         score -= 250.0
@@ -507,7 +509,7 @@ def score_stable_band_candidate(
         - float(stats["flat_month_ratio"]) * 50.0
         + min(trades, max(min_trades * 2, 1)) / max(min_trades, 1) * 15.0
     )
-    if bool(metrics.get("data_is_synthetic", True)):
+    if not metrics_have_real_non_synthetic_provider(metrics):
         score -= 500.0
     if bool(metrics.get("walk_forward_fallback_used", True)):
         score -= 250.0
@@ -616,6 +618,18 @@ def stable_band_return_in_range(
     if total_return < 0.0:
         return -max_abs <= total_return <= -min_abs
     return False
+
+
+def metrics_have_real_non_synthetic_provider(metrics: dict[str, Any]) -> bool:
+    if bool(metrics.get("data_is_synthetic", True)):
+        return False
+    providers = metrics.get("data_providers", [])
+    if isinstance(providers, str):
+        providers = [providers]
+    if not isinstance(providers, list) or not providers:
+        return False
+    provider_names = [str(provider).strip().lower() for provider in providers]
+    return all(provider_names) and not any("synthetic" in provider for provider in provider_names)
 
 
 def _assert_required_artifacts() -> None:
@@ -766,6 +780,7 @@ def _metrics_row(
         "positive_active_month_ratio",
         "win_rate_pct",
         "data_is_synthetic",
+        "data_providers",
         "walk_forward_windows",
         "walk_forward_fallback_used",
         "total_commission_jpy",

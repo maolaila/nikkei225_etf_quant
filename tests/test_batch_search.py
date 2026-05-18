@@ -38,6 +38,7 @@ def test_generate_candidate_overlays_support_aggressive_risk_profile():
 def test_candidate_passes_target_requires_real_walk_forward_metrics():
     metrics = {
         "data_is_synthetic": False,
+        "data_providers": ["jquants"],
         "walk_forward_windows": 6,
         "walk_forward_fallback_used": False,
         "total_trades": 50,
@@ -76,6 +77,7 @@ def test_candidate_passes_target_requires_real_walk_forward_metrics():
 def test_score_penalizes_missing_sample_size():
     base = {
         "data_is_synthetic": False,
+        "data_providers": ["jquants"],
         "walk_forward_windows": 6,
         "walk_forward_fallback_used": False,
         "total_trades": 60,
@@ -103,6 +105,7 @@ def test_score_penalizes_missing_sample_size():
 def test_stable_loss_objective_prefers_bounded_consistent_losses():
     bounded_loss = {
         "data_is_synthetic": False,
+        "data_providers": ["jquants"],
         "walk_forward_windows": 6,
         "walk_forward_fallback_used": False,
         "total_trades": 80,
@@ -160,6 +163,7 @@ def test_stable_loss_objective_prefers_bounded_consistent_losses():
 def test_stable_band_objective_accepts_profit_or_loss_inside_band():
     stable_profit = {
         "data_is_synthetic": False,
+        "data_providers": ["jquants"],
         "walk_forward_windows": 6,
         "walk_forward_fallback_used": False,
         "total_trades": 80,
@@ -195,6 +199,33 @@ def test_stable_band_objective_accepts_profit_or_loss_inside_band():
     assert score_stable_band_candidate(stable_profit, **kwargs) > score_stable_band_candidate(too_large, **kwargs)
 
 
+def test_stable_band_rejects_synthetic_provider_even_when_flag_is_false():
+    metrics = {
+        "data_is_synthetic": False,
+        "data_providers": ["jquants"],
+        "walk_forward_windows": 6,
+        "walk_forward_fallback_used": False,
+        "total_trades": 80,
+        "total_return_pct": -8.0,
+        "average_monthly_return_pct": -1.2,
+        "max_drawdown_pct": -6.0,
+        "monthly_returns": [{"return_pct": value} for value in [-1.0, -1.2, -0.8, 0.0, -1.1, -0.6]],
+    }
+    kwargs = {
+        "target_total_abs_return_pct": 5.0,
+        "max_total_abs_return_pct": 20.0,
+        "max_drawdown_pct": 20.0,
+        "min_trades": 50,
+        "min_stable_month_ratio": 0.60,
+        "min_walk_forward_windows": 6,
+    }
+
+    assert candidate_passes_stable_band_target(metrics, **kwargs)
+    assert not candidate_passes_stable_band_target({**metrics, "data_providers": ["synthetic"]}, **kwargs)
+    assert not candidate_passes_stable_band_target({**metrics, "data_providers": ["jquants", "synthetic_csv"]}, **kwargs)
+    assert not candidate_passes_stable_band_target({**metrics, "data_providers": []}, **kwargs)
+
+
 def test_target_gates_match_batch_search_arguments():
     gates = TargetGates(target_monthly_return_pct=2.5, min_trades=25)
 
@@ -217,6 +248,7 @@ def test_batch_search_writes_progress_summary_after_each_candidate(tmp_path, mon
         report_dir = config["backtest"]["report"]["output_dir"]
         metrics = {
             "data_is_synthetic": False,
+            "data_providers": ["jquants"],
             "walk_forward_windows": 6,
             "walk_forward_fallback_used": False,
             "total_trades": 60,
@@ -251,6 +283,7 @@ def test_batch_search_accepts_stable_band_objective(tmp_path, monkeypatch):
     def fake_run_backtest(config, model_name):
         return {
             "data_is_synthetic": False,
+            "data_providers": ["jquants"],
             "walk_forward_windows": 6,
             "walk_forward_fallback_used": False,
             "total_trades": 60,
@@ -284,6 +317,7 @@ def test_batch_search_accepts_stable_band_objective(tmp_path, monkeypatch):
 def test_stable_band_rejects_direction_mismatch():
     metrics = {
         "data_is_synthetic": False,
+        "data_providers": ["jquants"],
         "walk_forward_windows": 6,
         "walk_forward_fallback_used": False,
         "total_trades": 60,
