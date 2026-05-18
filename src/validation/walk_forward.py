@@ -21,6 +21,7 @@ def run_walk_forward(config: dict[str, Any], model_name: str | None = None) -> t
     checker = LeakageChecker()
     checker.assert_no_label_columns_in_features(features)
     checker.assert_daily_features_lagged(features)
+    checker.assert_no_future_timestamps(features, labels)
 
     wf_config = config.get("walk_forward", {})
     windows = walk_forward_splits(

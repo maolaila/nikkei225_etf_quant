@@ -39,3 +39,21 @@ def test_monthly_returns_record_positive_and_negative_months(tmp_path):
     assert "filterInput" in text
     assert "2026-02" in text
     assert "-10.00" in text
+
+
+def test_monthly_returns_fill_missing_calendar_months():
+    equity = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime(["2026-01-31 15:00", "2026-03-31 15:00"]),
+            "equity": [110.0, 118.8],
+        }
+    )
+
+    rows = calculate_monthly_returns(equity, initial_cash=100.0)
+
+    assert [row["year_month"] for row in rows] == ["2026-01", "2026-02", "2026-03"]
+    assert round(rows[0]["return_pct"], 4) == 10.0
+    assert rows[1]["start_equity_jpy"] == 110.0
+    assert rows[1]["end_equity_jpy"] == 110.0
+    assert rows[1]["return_pct"] == 0.0
+    assert round(rows[2]["return_pct"], 4) == 8.0

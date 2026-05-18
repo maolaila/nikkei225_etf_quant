@@ -16,6 +16,17 @@ def test_leakage_checker_rejects_label_columns_in_features():
     raise AssertionError("Expected label leakage assertion")
 
 
+def test_leakage_checker_rejects_features_after_label_range():
+    checker = LeakageChecker()
+    features = pd.DataFrame({"timestamp": pd.to_datetime(["2026-01-01", "2026-01-03"])})
+    labels = pd.DataFrame({"timestamp": pd.to_datetime(["2026-01-01", "2026-01-02"])})
+    try:
+        checker.assert_no_future_timestamps(features, labels)
+    except AssertionError:
+        return
+    raise AssertionError("Expected future timestamp leakage assertion")
+
+
 def test_walk_forward_splits_create_multiple_purged_windows():
     timestamps = pd.Series(pd.date_range("2024-01-01 09:00", "2025-07-31 15:00", freq="1D"))
     windows = walk_forward_splits(

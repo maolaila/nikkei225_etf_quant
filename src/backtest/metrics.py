@@ -112,12 +112,17 @@ def calculate_monthly_returns(equity_curve: pd.DataFrame, initial_cash: float) -
     frame["timestamp"] = pd.to_datetime(frame["timestamp"])
     frame = frame.sort_values("timestamp").reset_index(drop=True)
     frame["year_month"] = frame["timestamp"].dt.strftime("%Y-%m")
+    frame["month_period"] = pd.PeriodIndex(frame["year_month"], freq="M")
 
     rows: list[dict[str, Any]] = []
     previous_end_equity = float(initial_cash)
-    for year_month, group in frame.groupby("year_month", sort=True):
+    month_groups = {str(year_month): group for year_month, group in frame.groupby("year_month", sort=True)}
+    all_months = pd.period_range(frame["month_period"].iloc[0], frame["month_period"].iloc[-1], freq="M")
+    for month_period in all_months:
+        year_month = str(month_period)
+        group = month_groups.get(year_month, pd.DataFrame())
         start_equity = previous_end_equity
-        end_equity = float(group["equity"].iloc[-1])
+        end_equity = float(group["equity"].iloc[-1]) if not group.empty else previous_end_equity
         pnl_jpy = end_equity - start_equity
         return_pct = (end_equity / start_equity - 1.0) * 100.0 if start_equity else 0.0
         year, month = year_month.split("-", 1)

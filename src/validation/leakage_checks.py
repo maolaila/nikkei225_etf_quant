@@ -5,10 +5,10 @@ import pandas as pd
 
 class LeakageChecker:
     def assert_no_future_timestamps(self, features: pd.DataFrame, labels: pd.DataFrame) -> None:
+        if features.empty or labels.empty:
+            return
         feature_times = pd.to_datetime(features["timestamp"])
         label_times = pd.to_datetime(labels["timestamp"])
-        if feature_times.min() < label_times.min() and feature_times.max() > label_times.max():
-            return
         if feature_times.max() > label_times.max():
             raise AssertionError("Features extend beyond available label timestamps")
 
@@ -21,4 +21,3 @@ class LeakageChecker:
         forbidden = {"future_return_pct", "action", "action_name", "future_close"} & set(features.columns)
         if forbidden:
             raise AssertionError(f"Label columns leaked into features: {sorted(forbidden)}")
-
